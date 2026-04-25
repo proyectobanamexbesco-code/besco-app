@@ -1,0 +1,15 @@
+[theme]
+# Color principal (Botones, barras de carga, controles deslizantes)
+primaryColor = "#E21836"  # Rojo BESCO
+
+# Color de fondo de la aplicación
+backgroundColor = "#F4F6F9" # Gris muy claro para que resalte el texto
+
+# Color de fondo del panel lateral (si algún día lo usas)
+secondaryBackgroundColor = "#1E3A5F" # Azul Marino BESCO
+
+# Color del texto
+textColor = "#262730" # Gris oscuro casi negro
+
+# Tipografía
+font = "sans serif"
