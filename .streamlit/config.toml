@@ -1,4 +1,11 @@
 [theme]
+base = "light"
+primaryColor = "#E21836"
+backgroundColor = "#F4F6F9"
+secondaryBackgroundColor = "#1E3A5F"
+textColor = "#262730"
+font = "sans serif"
+[theme]
 # Color principal (Botones, barras de carga, controles deslizantes)
 primaryColor = "#E21836"  # Rojo BESCO
 
