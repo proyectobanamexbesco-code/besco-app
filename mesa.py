@@ -64,20 +64,30 @@ class BESCO_PDF(FPDF):
                     self.set_y(y_start + ((row + 1) * 70) + 5)
             self.ln(5)
 
-# --- FUNCIÓN DE CORREO AUTOMÁTICO ---
-def enviar_correo(pdf_bytes, cliente, folio):
+# --- FUNCIÓN DE CORREO AUTOMÁTICO (MODIFICADA) ---
+def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
     try:
-        # Extraer credenciales de la bóveda segura de Streamlit
         remitente = st.secrets["EMAIL_SENDER"]
         password = st.secrets["EMAIL_PASSWORD"]
-        destinatario = "gerardo.mendez@besco.mx"
+        
+        # 1. Tu correo base siempre está incluido
+        destinatarios = ["gerardo.mendez@besco.mx"]
+        
+        # 2. Si el técnico escribió más correos, los agregamos a la lista
+        if correos_extra:
+            # Separamos por comas y limpiamos espacios vacíos
+            extras = [correo.strip() for correo in correos_extra.split(",") if correo.strip()]
+            destinatarios.extend(extras)
 
         msg = EmailMessage()
         tk_str = f" y numero de tk {folio}" if folio else ""
         msg['Subject'] = f"reporte fotografico de la aplicacion besco {cliente}{tk_str}"
         msg['From'] = remitente
-        msg['To'] = destinatario
-        msg.set_content(f"Se ha generado un nuevo reporte desde la aplicación BESCO.\n\nCliente: {cliente}\nFolio/TK: {folio}")
+        
+        # Juntamos todos los correos para el envío
+        msg['To'] = ", ".join(destinatarios) 
+        
+        msg.set_content(f"Se ha generado un nuevo reporte desde la aplicación BESCO.\n\nCliente: {cliente}\nFolio/TK: {folio}\n\nSe adjunta el documento PDF con la evidencia.")
 
         # Adjuntar PDF
         nombre_archivo = f"Reporte_{cliente}_{folio}.pdf"
@@ -141,6 +151,12 @@ f_despues = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True)
 st.subheader("6. Materiales")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
 
+# --- NUEVA SECCIÓN DE CORREOS ADICIONALES ---
+st.markdown("---")
+st.subheader("7. Envío de Reporte")
+st.info("💡 Tu reporte siempre se enviará a gerardo.mendez@besco.mx por seguridad.")
+correos_adicionales = st.text_input("Agregar destinatarios extra (separe los correos con una coma)", placeholder="ejemplo@cliente.com, alejandro.hernandez@besco.mx")
+
 if st.button("🚀 Generar Reporte Final", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
@@ -187,15 +203,16 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     nombre_pdf = f"Reporte_BESCO_{folio}.pdf"
     
-    # Intentar enviar el correo
+    # Intentar enviar el correo incluyendo los adicionales
     if "EMAIL_SENDER" in st.secrets:
-        exito = enviar_correo(pdf_bytes, cliente, folio)
+        # Pasamos los correos extra a la función
+        exito = enviar_correo(pdf_bytes, cliente, folio, correos_adicionales)
         if exito:
-            st.success(f"✅ ¡Reporte Listo y enviado por correo a gerardo.mendez@besco.mx!")
+            st.success(f"✅ ¡Reporte Listo y enviado a los destinatarios!")
         else:
             st.warning("El reporte se generó pero hubo un error al enviar el correo.")
     else:
-        st.warning("⚠️ Reporte generado. (El envío por correo está inactivo hasta configurar los Secretos).")
+        st.warning("⚠️ Reporte generado. (El envío por correo está inactivo).")
 
     st.download_button(
         label="📥 Descargar PDF a mi Celular",
