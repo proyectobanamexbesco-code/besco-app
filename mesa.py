@@ -6,6 +6,8 @@ from PIL import Image
 import os
 import smtplib
 from email.message import EmailMessage
+import io
+from pypdf import PdfWriter
 
 # --- RUTAS PARA LA NUBE ---
 LOGO_PATH = "logo besco 2026.jpeg"
@@ -69,7 +71,6 @@ def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
     try:
         remitente = st.secrets["EMAIL_SENDER"]
         password = st.secrets["EMAIL_PASSWORD"]
-        
         destinatarios = ["gerardo.mendez@besco.mx"]
         
         if correos_extra:
@@ -81,9 +82,7 @@ def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
         msg['Subject'] = f"reporte fotografico de la aplicacion besco {cliente}{tk_str}"
         msg['From'] = remitente
         msg['To'] = ", ".join(destinatarios) 
-        
         msg.set_content(f"Se ha generado un nuevo reporte desde la aplicación BESCO.\n\nCliente: {cliente}\nFolio/TK: {folio}\n\nSe adjunta el documento PDF con la evidencia.")
-
         nombre_archivo = f"Reporte_{cliente}_{folio}.pdf"
         msg.add_attachment(pdf_bytes, maintype='application', subtype='pdf', filename=nombre_archivo)
 
@@ -145,11 +144,10 @@ st.subheader("5. Evidencia Fotográfica")
 f_antes = st.file_uploader("Fotos ANTES", accept_multiple_files=True)
 f_despues = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True)
 
-# --- NUEVA SECCIÓN: EVIDENCIA DOCUMENTAL (SOLO 1 FOTO) ---
+# --- SECCIÓN 6: MODIFICADA PARA ACEPTAR PDF E IMAGEN ---
 st.subheader("6. Evidencia Documental")
-st.info("📌 Cargue aquí una fotografía nítida del reporte físico firmado y sellado por el cliente.")
-# accept_multiple_files=False asegura que solo puedan subir una imagen
-f_folio = st.file_uploader("FOLIO BESCO", accept_multiple_files=False)
+st.info("📌 Cargue aquí una fotografía o un archivo PDF del reporte físico firmado y sellado por el cliente.")
+f_folio = st.file_uploader("FOLIO BESCO", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=False)
 
 st.subheader("7. Materiales")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
@@ -157,12 +155,13 @@ df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_
 st.markdown("---")
 st.subheader("8. Envío de Reporte")
 st.info("💡 Tu reporte siempre se enviará a gerardo.mendez@besco.mx por seguridad.")
-correos_adicionales = st.text_input("Agregar destinatarios extra (separe los correos con una coma)", placeholder="ejemplo@cliente.com, alejandro.hernandez@besco.mx")
+correos_adicionales = st.text_input("Agregar destinatarios extra (separe los correos con una coma)", placeholder="ejemplo@cliente.com")
 
 if st.button("🚀 Generar Reporte Final", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
     
+    # [Generación de datos de texto y tablas]
     pdf.add_custom_section("Información General")
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
@@ -192,16 +191,10 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
         pdf.add_custom_section("Comentarios")
         pdf.multi_cell(0, 7, comentarios, 1); pdf.ln(5)
 
-    # Procesar Fotos Antes y Después
     if f_antes: pdf.photo_grid("Evidencia Fotográfica (Antes)", f_antes)
     if f_despues: 
         if pdf.get_y() > 180: pdf.add_page()
         pdf.photo_grid("Evidencia Fotográfica (Después)", f_despues)
-
-    # Procesar Foto del Folio Firmado (Se mete en una lista [f_folio] para que el código la procese igual)
-    if f_folio:
-        if pdf.get_y() > 180: pdf.add_page()
-        pdf.photo_grid("FOLIO BESCO (Reporte Firmado y Sellado)", [f_folio])
 
     df_c = df_mat.dropna(subset=["Descripción"])
     if not df_c.empty:
@@ -213,7 +206,42 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
         for _, row in df_c.iterrows():
             pdf.cell(30, 7, str(row["Cantidad"]), 1); pdf.cell(160, 7, str(row["Descripción"]), 1, 1)
 
+    # --- LÓGICA PARA IMAGEN A PÁGINA COMPLETA ---
+    if f_folio and not f_folio.name.lower().endswith('.pdf'):
+        pdf.add_page()
+        pdf.add_custom_section("FOLIO BESCO (Reporte Firmado y Sellado)")
+        img = Image.open(f_folio).convert("RGB")
+        temp_folio = "temp_folio_full.jpg"
+        img.save(temp_folio)
+        
+        # Matemáticas para ajustar a página completa sin deformar
+        y_start = pdf.get_y()
+        avail_w = 190
+        avail_h = 280 - y_start
+        
+        img_w, img_h = img.size
+        escala = min(avail_w/img_w, avail_h/img_h)
+        final_w = img_w * escala
+        final_h = img_h * escala
+        x_pos = 10 + (190 - final_w) / 2  # Centrado horizontal
+        
+        pdf.image(temp_folio, x=x_pos, y=y_start, w=final_w, h=final_h)
+
+    # Convertir el reporte generado a Bytes
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
+    
+    # --- LÓGICA PARA FUSIONAR SI EL FOLIO ES UN PDF ---
+    if f_folio and f_folio.name.lower().endswith('.pdf'):
+        merger = PdfWriter()
+        # Agregar el reporte que acabamos de crear
+        merger.append(io.BytesIO(pdf_bytes))
+        # Agregar el PDF que subió el técnico
+        merger.append(f_folio)
+        
+        salida_pdf = io.BytesIO()
+        merger.write(salida_pdf)
+        pdf_bytes = salida_pdf.getvalue()
+
     nombre_pdf = f"Reporte_BESCO_{folio}.pdf"
     
     if "EMAIL_SENDER" in st.secrets:
