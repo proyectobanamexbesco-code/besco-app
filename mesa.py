@@ -102,7 +102,6 @@ st.subheader("1. Identificación del Servicio")
 col_cl1, col_cl2, col_cl3 = st.columns([2, 1, 1])
 cliente = col_cl1.text_input("Cliente")
 folio = col_cl2.text_input("Folio / OT / TK")
-# --- CAMBIO AQUÍ: DE SLIDER A SELECTBOX ---
 estado_op = col_cl3.selectbox("Estado de Operación", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], index=4)
 
 c1, c2, c3, c4 = st.columns(4)
@@ -146,11 +145,17 @@ st.subheader("5. Evidencia Fotográfica")
 f_antes = st.file_uploader("Fotos ANTES", accept_multiple_files=True)
 f_despues = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True)
 
-st.subheader("6. Materiales")
+# --- NUEVA SECCIÓN: EVIDENCIA DOCUMENTAL (SOLO 1 FOTO) ---
+st.subheader("6. Evidencia Documental")
+st.info("📌 Cargue aquí una fotografía nítida del reporte físico firmado y sellado por el cliente.")
+# accept_multiple_files=False asegura que solo puedan subir una imagen
+f_folio = st.file_uploader("FOLIO BESCO", accept_multiple_files=False)
+
+st.subheader("7. Materiales")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
 
 st.markdown("---")
-st.subheader("7. Envío de Reporte")
+st.subheader("8. Envío de Reporte")
 st.info("💡 Tu reporte siempre se enviará a gerardo.mendez@besco.mx por seguridad.")
 correos_adicionales = st.text_input("Agregar destinatarios extra (separe los correos con una coma)", placeholder="ejemplo@cliente.com, alejandro.hernandez@besco.mx")
 
@@ -187,10 +192,16 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
         pdf.add_custom_section("Comentarios")
         pdf.multi_cell(0, 7, comentarios, 1); pdf.ln(5)
 
+    # Procesar Fotos Antes y Después
     if f_antes: pdf.photo_grid("Evidencia Fotográfica (Antes)", f_antes)
     if f_despues: 
         if pdf.get_y() > 180: pdf.add_page()
         pdf.photo_grid("Evidencia Fotográfica (Después)", f_despues)
+
+    # Procesar Foto del Folio Firmado (Se mete en una lista [f_folio] para que el código la procese igual)
+    if f_folio:
+        if pdf.get_y() > 180: pdf.add_page()
+        pdf.photo_grid("FOLIO BESCO (Reporte Firmado y Sellado)", [f_folio])
 
     df_c = df_mat.dropna(subset=["Descripción"])
     if not df_c.empty:
