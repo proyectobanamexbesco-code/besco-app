@@ -102,7 +102,8 @@ st.subheader("1. Identificación del Servicio")
 col_cl1, col_cl2, col_cl3 = st.columns([2, 1, 1])
 cliente = col_cl1.text_input("Cliente")
 folio = col_cl2.text_input("Folio / OT / TK")
-estado_op = col_cl3.slider("Estado de Operación (1-10)", 1, 10, 5)
+# --- CAMBIO AQUÍ: DE SLIDER A SELECTBOX ---
+estado_op = col_cl3.selectbox("Estado de Operación", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], index=4)
 
 c1, c2, c3, c4 = st.columns(4)
 tecnico = c1.text_input("Técnico Asignado")
@@ -112,11 +113,10 @@ referencia = c4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
 st.markdown("---")
 
 st.subheader("2. Especialidad y Mediciones Críticas")
-# SE AGREGÓ "Otros" A LA LISTA DE ESPECIALIDADES
 esp = st.selectbox("Categoría de Equipo", ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Plantas de Emergencia", "Transformadores", "Otros"])
 
 mediciones = {}
-otros_detalles = "" # Variable para guardar el texto si eligen "Otros"
+otros_detalles = "" 
 
 if esp == "Aire Acondicionado":
     cols = st.columns(4)
@@ -129,7 +129,6 @@ elif esp == "Tableros Eléctricos":
     mediciones['V L1-L2'] = cols[0].text_input("V L1-L2")
     mediciones['Amp A'] = cols[1].text_input("Amp A")
     mediciones['Amp B'] = cols[2].text_input("Amp B")
-# CONDICIONAL PARA "Otros"
 elif esp == "Otros":
     otros_detalles = st.text_area("Especifique los detalles, equipo o mediciones necesarias:")
 
@@ -168,7 +167,6 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
     pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia}) | Técnico: {tecnico}", 0, 1)
     pdf.ln(5)
 
-    # Imprimir la tablita si eligieron una especialidad con campos específicos
     valid_meds = {k: v for k, v in mediciones.items() if v}
     if valid_meds:
         pdf.add_custom_section(f"Mediciones Técnicas: {esp}")
@@ -176,7 +174,6 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
             pdf.cell(60, 7, f"{k}:", 1); pdf.cell(130, 7, f"{v}", 1, 1)
         pdf.ln(5)
     
-    # Imprimir el recuadro grande si eligieron "Otros"
     if esp == "Otros" and otros_detalles:
         pdf.add_custom_section("Detalles Técnicos Especiales")
         pdf.multi_cell(0, 7, otros_detalles, 1)
