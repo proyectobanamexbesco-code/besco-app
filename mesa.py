@@ -64,18 +64,15 @@ class BESCO_PDF(FPDF):
                     self.set_y(y_start + ((row + 1) * 70) + 5)
             self.ln(5)
 
-# --- FUNCIÓN DE CORREO AUTOMÁTICO (MODIFICADA) ---
+# --- FUNCIÓN DE CORREO AUTOMÁTICO ---
 def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
     try:
         remitente = st.secrets["EMAIL_SENDER"]
         password = st.secrets["EMAIL_PASSWORD"]
         
-        # 1. Tu correo base siempre está incluido
         destinatarios = ["gerardo.mendez@besco.mx"]
         
-        # 2. Si el técnico escribió más correos, los agregamos a la lista
         if correos_extra:
-            # Separamos por comas y limpiamos espacios vacíos
             extras = [correo.strip() for correo in correos_extra.split(",") if correo.strip()]
             destinatarios.extend(extras)
 
@@ -83,17 +80,13 @@ def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
         tk_str = f" y numero de tk {folio}" if folio else ""
         msg['Subject'] = f"reporte fotografico de la aplicacion besco {cliente}{tk_str}"
         msg['From'] = remitente
-        
-        # Juntamos todos los correos para el envío
         msg['To'] = ", ".join(destinatarios) 
         
         msg.set_content(f"Se ha generado un nuevo reporte desde la aplicación BESCO.\n\nCliente: {cliente}\nFolio/TK: {folio}\n\nSe adjunta el documento PDF con la evidencia.")
 
-        # Adjuntar PDF
         nombre_archivo = f"Reporte_{cliente}_{folio}.pdf"
         msg.add_attachment(pdf_bytes, maintype='application', subtype='pdf', filename=nombre_archivo)
 
-        # Enviar usando el servidor de Gmail
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(remitente, password)
             smtp.send_message(msg)
@@ -119,9 +112,12 @@ referencia = c4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
 st.markdown("---")
 
 st.subheader("2. Especialidad y Mediciones Críticas")
-esp = st.selectbox("Categoría de Equipo", ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Plantas de Emergencia", "Transformadores"])
+# SE AGREGÓ "Otros" A LA LISTA DE ESPECIALIDADES
+esp = st.selectbox("Categoría de Equipo", ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Plantas de Emergencia", "Transformadores", "Otros"])
 
 mediciones = {}
+otros_detalles = "" # Variable para guardar el texto si eligen "Otros"
+
 if esp == "Aire Acondicionado":
     cols = st.columns(4)
     mediciones['P. Succión'] = cols[0].text_input("Succión (PSI)")
@@ -133,6 +129,9 @@ elif esp == "Tableros Eléctricos":
     mediciones['V L1-L2'] = cols[0].text_input("V L1-L2")
     mediciones['Amp A'] = cols[1].text_input("Amp A")
     mediciones['Amp B'] = cols[2].text_input("Amp B")
+# CONDICIONAL PARA "Otros"
+elif esp == "Otros":
+    otros_detalles = st.text_area("Especifique los detalles, equipo o mediciones necesarias:")
 
 st.markdown("---")
 st.subheader("3. Datos del Equipo")
@@ -151,7 +150,6 @@ f_despues = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True)
 st.subheader("6. Materiales")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
 
-# --- NUEVA SECCIÓN DE CORREOS ADICIONALES ---
 st.markdown("---")
 st.subheader("7. Envío de Reporte")
 st.info("💡 Tu reporte siempre se enviará a gerardo.mendez@besco.mx por seguridad.")
@@ -170,11 +168,18 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
     pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia}) | Técnico: {tecnico}", 0, 1)
     pdf.ln(5)
 
+    # Imprimir la tablita si eligieron una especialidad con campos específicos
     valid_meds = {k: v for k, v in mediciones.items() if v}
     if valid_meds:
         pdf.add_custom_section(f"Mediciones Técnicas: {esp}")
         for k, v in valid_meds.items():
             pdf.cell(60, 7, f"{k}:", 1); pdf.cell(130, 7, f"{v}", 1, 1)
+        pdf.ln(5)
+    
+    # Imprimir el recuadro grande si eligieron "Otros"
+    if esp == "Otros" and otros_detalles:
+        pdf.add_custom_section("Detalles Técnicos Especiales")
+        pdf.multi_cell(0, 7, otros_detalles, 1)
         pdf.ln(5)
 
     if tag or marca:
@@ -203,9 +208,7 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     nombre_pdf = f"Reporte_BESCO_{folio}.pdf"
     
-    # Intentar enviar el correo incluyendo los adicionales
     if "EMAIL_SENDER" in st.secrets:
-        # Pasamos los correos extra a la función
         exito = enviar_correo(pdf_bytes, cliente, folio, correos_adicionales)
         if exito:
             st.success(f"✅ ¡Reporte Listo y enviado a los destinatarios!")
