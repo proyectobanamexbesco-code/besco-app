@@ -103,6 +103,11 @@ cliente = col_cl1.text_input("Cliente")
 folio = col_cl2.text_input("Folio / OT / TK")
 estado_op = col_cl3.selectbox("Estado de Operación", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], index=4)
 
+# --- NUEVOS CAMPOS: SUCURSAL Y OFICINA ---
+col_loc1, col_loc2 = st.columns(2)
+sucursal = col_loc1.text_input("Sucursal / Inmueble")
+oficina = col_loc2.text_input("Oficina / Área específica")
+
 c1, c2, c3, c4 = st.columns(4)
 tecnico = c1.text_input("Técnico Asignado")
 supervisor = c2.text_input("Supervisor")
@@ -144,7 +149,6 @@ st.subheader("5. Evidencia Fotográfica")
 f_antes = st.file_uploader("Fotos ANTES", accept_multiple_files=True)
 f_despues = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True)
 
-# --- SECCIÓN 6: MODIFICADA PARA ACEPTAR PDF E IMAGEN ---
 st.subheader("6. Evidencia Documental")
 st.info("📌 Cargue aquí una fotografía o un archivo PDF del reporte físico firmado y sellado por el cliente.")
 f_folio = st.file_uploader("FOLIO BESCO", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=False)
@@ -161,10 +165,18 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
     
-    # [Generación de datos de texto y tablas]
+    # --- ACTUALIZACIÓN DE PDF CON NUEVOS CAMPOS ---
     pdf.add_custom_section("Información General")
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
+    
+    # Imprimir Sucursal y Oficina si fueron llenados
+    loc_str = ""
+    if sucursal: loc_str += f"Sucursal: {sucursal} "
+    if oficina: loc_str += f"| Oficina: {oficina}"
+    if loc_str:
+        pdf.cell(0, 7, loc_str, 0, 1)
+
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(0, 7, f"ESTADO DE OPERACIÓN DEL EQUIPO: {estado_op}/10", 0, 1)
     pdf.set_font('Arial', '', 10)
@@ -206,7 +218,6 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
         for _, row in df_c.iterrows():
             pdf.cell(30, 7, str(row["Cantidad"]), 1); pdf.cell(160, 7, str(row["Descripción"]), 1, 1)
 
-    # --- LÓGICA PARA IMAGEN A PÁGINA COMPLETA ---
     if f_folio and not f_folio.name.lower().endswith('.pdf'):
         pdf.add_page()
         pdf.add_custom_section("FOLIO BESCO (Reporte Firmado y Sellado)")
@@ -214,7 +225,6 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
         temp_folio = "temp_folio_full.jpg"
         img.save(temp_folio)
         
-        # Matemáticas para ajustar a página completa sin deformar
         y_start = pdf.get_y()
         avail_w = 190
         avail_h = 280 - y_start
@@ -223,19 +233,15 @@ if st.button("🚀 Generar Reporte Final", type="primary"):
         escala = min(avail_w/img_w, avail_h/img_h)
         final_w = img_w * escala
         final_h = img_h * escala
-        x_pos = 10 + (190 - final_w) / 2  # Centrado horizontal
+        x_pos = 10 + (190 - final_w) / 2  
         
         pdf.image(temp_folio, x=x_pos, y=y_start, w=final_w, h=final_h)
 
-    # Convertir el reporte generado a Bytes
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     
-    # --- LÓGICA PARA FUSIONAR SI EL FOLIO ES UN PDF ---
     if f_folio and f_folio.name.lower().endswith('.pdf'):
         merger = PdfWriter()
-        # Agregar el reporte que acabamos de crear
         merger.append(io.BytesIO(pdf_bytes))
-        # Agregar el PDF que subió el técnico
         merger.append(f_folio)
         
         salida_pdf = io.BytesIO()
