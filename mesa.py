@@ -51,18 +51,16 @@ class BESCO_PDF(FPDF):
         self.ln(2)
         self.set_text_color(0, 0, 0)
 
-    # --- NUEVO MOTOR DE FOTOS INTELIGENTE (SALTO DE PÁGINA AUTOMÁTICO) ---
     def photo_grid(self, title, photos, eq_index=0):
         if not photos:
             return
 
         self.add_custom_section(title)
         
-        # Dimensiones para 2 fotos por fila
         ancho_foto = 90
         alto_foto = 65
-        espacio_vertical = 75 # Alto de foto + margen
-        margen_inferior_seguro = 280 # Dónde acaba la hoja (tamaño A4 es ~297mm)
+        espacio_vertical = 75
+        margen_inferior_seguro = 280
         
         for i, foto in enumerate(photos):
             img = Image.open(foto).convert("RGB")
@@ -71,15 +69,11 @@ class BESCO_PDF(FPDF):
             temp_p = f"temp_{id_foto}_eq{eq_index}_{marca_tiempo}_{i}.jpg"
             img.save(temp_p)
             
-            # Matemáticas para la cuadrícula
-            col = i % 2 # 0 para izquierda, 1 para derecha
+            col = i % 2
             
-            # Si estamos en la columna izquierda (inicio de nueva fila), revisamos el espacio
             if col == 0:
-                # Si la foto no cabe en esta página, hacemos un salto
                 if self.get_y() + espacio_vertical > margen_inferior_seguro:
                     self.add_page()
-                    # Ponemos un pequeño subtítulo para no perder contexto en la nueva hoja
                     self.set_font('Arial', 'I', 9)
                     self.set_text_color(100, 100, 100)
                     self.cell(0, 6, f"(Continuación) {title}", 0, 1, 'L')
@@ -87,18 +81,15 @@ class BESCO_PDF(FPDF):
                     self.ln(2)
 
             y_actual = self.get_y()
-            # Pegar la imagen: col 0 = x=10, col 1 = x=105
             self.image(temp_p, x=10 + (col * 95), y=y_actual, w=ancho_foto, h=alto_foto)
             
-            # Si pegamos la foto de la derecha (col=1) o es la última foto de la lista impar
             if col == 1 or i == len(photos) - 1:
-                # Bajamos el cursor ("Y") para la siguiente fila
                 self.set_y(y_actual + espacio_vertical)
         
         self.ln(5)
 
-# --- FUNCIÓN DE CORREO AUTOMÁTICO ---
-def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
+# --- FUNCIÓN DE CORREO AUTOMÁTICO (MODIFICADA PARA EL ASUNTO) ---
+def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, correos_extra):
     try:
         remitente = st.secrets["EMAIL_SENDER"]
         password = st.secrets["EMAIL_PASSWORD"]
@@ -109,12 +100,18 @@ def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
             destinatarios.extend(extras)
 
         msg = EmailMessage()
-        tk_str = f" y numero de tk {folio}" if folio else ""
-        msg['Subject'] = f"reporte fotografico de la aplicacion besco {cliente}{tk_str}"
+        
+        # --- NUEVO ASUNTO DEL CORREO ---
+        asunto = f"Reporte Fotográfico BESCO: {cliente}"
+        if folio: asunto += f" | TK: {folio}"
+        if sucursal: asunto += f" | Suc: {sucursal}"
+        if oficina: asunto += f" | Of: {oficina}"
+        
+        msg['Subject'] = asunto
         msg['From'] = remitente
         msg['To'] = ", ".join(destinatarios) 
-        msg.set_content(f"Se ha generado un nuevo reporte múltiple desde la aplicación BESCO.\n\nCliente: {cliente}\nFolio/TK: {folio}\n\nSe adjunta el documento PDF con la evidencia.")
-        nombre_archivo = f"Reporte_{cliente}_{folio}.pdf"
+        msg.set_content(f"Se ha generado un nuevo reporte múltiple desde la aplicación BESCO.\n\nCliente: {cliente}\nFolio/TK: {folio}\nSucursal: {sucursal}\nOficina: {oficina}\n\nSe adjunta el documento PDF con la evidencia.")
+        
         msg.add_attachment(pdf_bytes, maintype='application', subtype='pdf', filename=nombre_archivo)
 
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
@@ -251,7 +248,6 @@ if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
             pdf.multi_cell(0, 6, f"Comentarios: {eq['comentarios']}", 1); pdf.ln(2)
 
         if eq['f_antes']: pdf.photo_grid(f"Evidencia Antes (Eq. {eq['numero']})", eq['f_antes'], eq['numero'])
-        # Ya no forzamos el salto de página aquí. El motor photo_grid decide si es necesario.
         if eq['f_despues']: pdf.photo_grid(f"Evidencia Después (Eq. {eq['numero']})", eq['f_despues'], eq['numero'])
         pdf.ln(5)
 
@@ -295,12 +291,25 @@ if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
         merger.write(salida_pdf)
         pdf_bytes = salida_pdf.getvalue()
 
-    nombre_pdf = f"Reporte_BESCO_Multiple_{folio}.pdf"
+    # --- NUEVO NOMBRE DE ARCHIVO PDF ---
+    # Limpiamos los espacios en blanco adicionales para que el nombre del archivo se vea prolijo
+    nom_cliente = cliente.strip() if cliente else "SinCliente"
+    nom_folio = folio.strip() if folio else "SinFolio"
+    nom_sucursal = f"_{sucursal.strip()}" if sucursal else ""
+    nom_oficina = f"_{oficina.strip()}" if oficina else ""
+    
+    # El archivo se llamará: Reporte_BESCO_Cliente_Folio_Sucursal_Oficina.pdf
+    # Ejemplo: Reporte_BESCO_Banamex_TK-9999_Centro_Piso2.pdf
+    nombre_pdf = f"Reporte_BESCO_{nom_cliente}_{nom_folio}{nom_sucursal}{nom_oficina}.pdf"
+    
+    # Quitamos caracteres que podrían dar error en el nombre del archivo de Windows
+    nombre_pdf = nombre_pdf.replace(" ", "_").replace("/", "-").replace("\\", "-")
     
     if "EMAIL_SENDER" in st.secrets:
-        exito = enviar_correo(pdf_bytes, cliente, folio, correos_adicionales)
+        # Pasamos el nombre del archivo a la función de correo
+        exito = enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_pdf, correos_adicionales)
         if exito:
-            st.success(f"✅ ¡Reporte Múltiple Listo y enviado a los destinatarios!")
+            st.success(f"✅ ¡Reporte Listo y enviado a los destinatarios!")
         else:
             st.warning("El reporte se generó pero hubo un error al enviar el correo.")
     else:
