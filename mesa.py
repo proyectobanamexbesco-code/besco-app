@@ -51,24 +51,51 @@ class BESCO_PDF(FPDF):
         self.ln(2)
         self.set_text_color(0, 0, 0)
 
-    # CORRECCIÓN DE CACHÉ DE FOTOS: Uso de timestamp para que nunca se reemplacen las fotos Antes/Después
+    # --- NUEVO MOTOR DE FOTOS INTELIGENTE (SALTO DE PÁGINA AUTOMÁTICO) ---
     def photo_grid(self, title, photos, eq_index=0):
-        if photos:
-            self.add_custom_section(title)
-            y_start = self.get_y()
-            for i, foto in enumerate(photos):
-                img = Image.open(foto).convert("RGB")
-                id_foto = title.replace(" ", "_")
-                # Nombre ultra único para evitar sobreescritura (bug de fotos repetidas corregido)
-                marca_tiempo = int(time.time() * 1000)
-                temp_p = f"temp_{id_foto}_eq{eq_index}_{marca_tiempo}_{i}.jpg"
-                img.save(temp_p)
-                col = i % 2
-                row = i // 2
-                self.image(temp_p, x=10 + (col * 95), y=y_start + (row * 70), w=90, h=65)
-                if col == 1 or i == len(photos)-1:
-                    self.set_y(y_start + ((row + 1) * 70) + 5)
-            self.ln(5)
+        if not photos:
+            return
+
+        self.add_custom_section(title)
+        
+        # Dimensiones para 2 fotos por fila
+        ancho_foto = 90
+        alto_foto = 65
+        espacio_vertical = 75 # Alto de foto + margen
+        margen_inferior_seguro = 280 # Dónde acaba la hoja (tamaño A4 es ~297mm)
+        
+        for i, foto in enumerate(photos):
+            img = Image.open(foto).convert("RGB")
+            id_foto = title.replace(" ", "_")
+            marca_tiempo = int(time.time() * 1000)
+            temp_p = f"temp_{id_foto}_eq{eq_index}_{marca_tiempo}_{i}.jpg"
+            img.save(temp_p)
+            
+            # Matemáticas para la cuadrícula
+            col = i % 2 # 0 para izquierda, 1 para derecha
+            
+            # Si estamos en la columna izquierda (inicio de nueva fila), revisamos el espacio
+            if col == 0:
+                # Si la foto no cabe en esta página, hacemos un salto
+                if self.get_y() + espacio_vertical > margen_inferior_seguro:
+                    self.add_page()
+                    # Ponemos un pequeño subtítulo para no perder contexto en la nueva hoja
+                    self.set_font('Arial', 'I', 9)
+                    self.set_text_color(100, 100, 100)
+                    self.cell(0, 6, f"(Continuación) {title}", 0, 1, 'L')
+                    self.set_text_color(0, 0, 0)
+                    self.ln(2)
+
+            y_actual = self.get_y()
+            # Pegar la imagen: col 0 = x=10, col 1 = x=105
+            self.image(temp_p, x=10 + (col * 95), y=y_actual, w=ancho_foto, h=alto_foto)
+            
+            # Si pegamos la foto de la derecha (col=1) o es la última foto de la lista impar
+            if col == 1 or i == len(photos) - 1:
+                # Bajamos el cursor ("Y") para la siguiente fila
+                self.set_y(y_actual + espacio_vertical)
+        
+        self.ln(5)
 
 # --- FUNCIÓN DE CORREO AUTOMÁTICO ---
 def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
@@ -101,7 +128,6 @@ def enviar_correo(pdf_bytes, cliente, folio, correos_extra):
 # --- INTERFAZ ---
 st.title("📑 Sistema de Evidencia Técnica BESCO")
 
-# --- 1. DATOS GENERALES ---
 st.subheader("1. Identificación General del Servicio")
 col_cl1, col_cl2, col_cl3 = st.columns([2, 1, 1])
 cliente = col_cl1.text_input("Cliente")
@@ -120,11 +146,10 @@ referencia = c4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
 
 st.markdown("---")
 
-# --- 2. MULTIPLICADOR DE EQUIPOS ---
 st.subheader("2. Equipos a Reportar")
 num_equipos = st.number_input("¿Cuántos equipos diferentes se atendieron?", min_value=1, max_value=20, value=1)
 
-equipos_data = [] # Aquí guardaremos la información de todos los equipos
+equipos_data = []
 
 for i in range(num_equipos):
     st.markdown(f"### ⚙️ DETALLES DEL EQUIPO {i+1}")
@@ -158,7 +183,6 @@ for i in range(num_equipos):
     f_antes = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"f_ant_{i}")
     f_despues = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"f_des_{i}")
     
-    # Guardar los datos de este equipo en la lista maestra
     equipos_data.append({
         "numero": i + 1,
         "esp": esp,
@@ -173,7 +197,6 @@ for i in range(num_equipos):
     })
     st.markdown("---")
 
-# --- 3. SECCIONES GLOBALES FINALES ---
 st.subheader("3. Materiales Utilizados (Global)")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
 
@@ -190,7 +213,6 @@ if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
     
-    # [Generación de datos Generales]
     pdf.add_custom_section("Información General del Servicio")
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
@@ -206,20 +228,16 @@ if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
     pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia}) | Técnico: {tecnico}", 0, 1)
     pdf.ln(5)
 
-    # --- CICLO PARA IMPRIMIR TODOS LOS EQUIPOS EN EL PDF ---
     for eq in equipos_data:
-        # Añadir página nueva si no hay espacio para el título del nuevo equipo
         if pdf.get_y() > 240: pdf.add_page()
         
         pdf.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
         
-        # Datos del equipo
         if eq['tag'] or eq['marca']:
             pdf.set_font('Arial', 'B', 9)
             pdf.cell(0, 7, f"TAG: {eq['tag']} | Modelo: {eq['marca']} | Capacidad: {eq['capacidad']}", 0, 1)
             pdf.set_font('Arial', '', 10)
 
-        # Mediciones
         valid_meds = {k: v for k, v in eq['mediciones'].items() if v}
         if valid_meds:
             for k, v in valid_meds.items():
@@ -229,18 +247,14 @@ if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
         if eq['esp'] == "Otros" and eq['otros_detalles']:
             pdf.multi_cell(0, 6, f"Detalles: {eq['otros_detalles']}", 1); pdf.ln(2)
 
-        # Comentarios
         if eq['comentarios']:
             pdf.multi_cell(0, 6, f"Comentarios: {eq['comentarios']}", 1); pdf.ln(2)
 
-        # Fotos (Pasamos el índice para que los nombres temporales sean únicos)
         if eq['f_antes']: pdf.photo_grid(f"Evidencia Antes (Eq. {eq['numero']})", eq['f_antes'], eq['numero'])
-        if eq['f_despues']: 
-            if pdf.get_y() > 180: pdf.add_page()
-            pdf.photo_grid(f"Evidencia Después (Eq. {eq['numero']})", eq['f_despues'], eq['numero'])
+        # Ya no forzamos el salto de página aquí. El motor photo_grid decide si es necesario.
+        if eq['f_despues']: pdf.photo_grid(f"Evidencia Después (Eq. {eq['numero']})", eq['f_despues'], eq['numero'])
         pdf.ln(5)
 
-    # --- MATERIALES GLOBALES ---
     df_c = df_mat.dropna(subset=["Descripción"])
     if not df_c.empty:
         if pdf.get_y() > 220: pdf.add_page()
@@ -252,7 +266,6 @@ if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
         for _, row in df_c.iterrows():
             pdf.cell(30, 7, str(row["Cantidad"]), 1); pdf.cell(160, 7, str(row["Descripción"]), 1, 1)
 
-    # --- LÓGICA DE FOLIO (IMAGEN A PÁGINA COMPLETA) ---
     if f_folio and not f_folio.name.lower().endswith('.pdf'):
         pdf.add_page()
         pdf.add_custom_section("FOLIO BESCO (Reporte Firmado y Sellado)")
@@ -274,7 +287,6 @@ if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
 
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     
-    # --- FUSIÓN DE PDF DEL CLIENTE AL FINAL ---
     if f_folio and f_folio.name.lower().endswith('.pdf'):
         merger = PdfWriter()
         merger.append(io.BytesIO(pdf_bytes))
