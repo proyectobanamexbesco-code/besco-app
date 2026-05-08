@@ -39,7 +39,7 @@ class BESCO_PDF(FPDF):
         self.cell(0, 10, 'REPORTE DE SERVICIO TÉCNICO', 0, 1, 'R')
         self.set_font('Arial', '', 9)
         self.set_x(100)
-        self.cell(0, 5, f"Emisión: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'R')
+        self.cell(0, 5, f"Emisión del Reporte: {datetime.now().strftime('%d/%m/%Y %H:%M')}", 0, 1, 'R')
         self.ln(12)
 
     def add_custom_section(self, title):
@@ -52,65 +52,45 @@ class BESCO_PDF(FPDF):
         self.set_text_color(0, 0, 0)
 
     def photo_grid(self, title, photos, eq_index=0):
-        if not photos:
-            return
-
+        if not photos: return
         self.add_custom_section(title)
-        
-        ancho_foto = 90
-        alto_foto = 65
-        espacio_vertical = 75
-        margen_inferior_seguro = 280
-        
+        ancho_foto, alto_foto, espacio_v, margen_inf = 90, 65, 75, 280
         for i, foto in enumerate(photos):
             img = Image.open(foto).convert("RGB")
-            id_foto = title.replace(" ", "_")
-            marca_tiempo = int(time.time() * 1000)
-            temp_p = f"temp_{id_foto}_eq{eq_index}_{marca_tiempo}_{i}.jpg"
+            id_f = title.replace(" ", "_")
+            temp_p = f"temp_{id_f}_eq{eq_index}_{int(time.time()*1000)}_{i}.jpg"
             img.save(temp_p)
-            
             col = i % 2
-            
-            if col == 0:
-                if self.get_y() + espacio_vertical > margen_inferior_seguro:
-                    self.add_page()
-                    self.set_font('Arial', 'I', 9)
-                    self.set_text_color(100, 100, 100)
-                    self.cell(0, 6, f"(Continuación) {title}", 0, 1, 'L')
-                    self.set_text_color(0, 0, 0)
-                    self.ln(2)
-
-            y_actual = self.get_y()
-            self.image(temp_p, x=10 + (col * 95), y=y_actual, w=ancho_foto, h=alto_foto)
-            
-            if col == 1 or i == len(photos) - 1:
-                self.set_y(y_actual + espacio_vertical)
-        
+            if col == 0 and self.get_y() + espacio_v > margen_inf:
+                self.add_page()
+                self.set_font('Arial', 'I', 9); self.set_text_color(100, 100, 100)
+                self.cell(0, 6, f"(Continuación) {title}", 0, 1, 'L')
+                self.set_text_color(0, 0, 0); self.ln(2)
+            y_act = self.get_y()
+            self.image(temp_p, x=10 + (col * 95), y=y_act, w=ancho_foto, h=alto_foto)
+            if col == 1 or i == len(photos) - 1: self.set_y(y_act + espacio_v)
         self.ln(5)
 
-# --- FUNCIÓN DE CORREO AUTOMÁTICO (MODIFICADA PARA EL ASUNTO) ---
-def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, correos_extra):
+# --- FUNCIÓN DE CORREO AUTOMÁTICO CON ENRUTAMIENTO ---
+def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, correos_extra, fecha_ejec, lista_destinatarios):
     try:
         remitente = st.secrets["EMAIL_SENDER"]
         password = st.secrets["EMAIL_PASSWORD"]
-        destinatarios = ["gerardo.mendez@besco.mx"]
         
+        destinatarios = lista_destinatarios.copy()
         if correos_extra:
-            extras = [correo.strip() for correo in correos_extra.split(",") if correo.strip()]
+            extras = [c.strip() for c in correos_extra.split(",") if c.strip()]
             destinatarios.extend(extras)
 
         msg = EmailMessage()
-        
-        # --- NUEVO ASUNTO DEL CORREO ---
         asunto = f"Reporte Fotográfico BESCO: {cliente}"
         if folio: asunto += f" | TK: {folio}"
-        if sucursal: asunto += f" | Suc: {sucursal}"
         if oficina: asunto += f" | Of: {oficina}"
         
         msg['Subject'] = asunto
         msg['From'] = remitente
-        msg['To'] = ", ".join(destinatarios) 
-        msg.set_content(f"Se ha generado un nuevo reporte múltiple desde la aplicación BESCO.\n\nCliente: {cliente}\nFolio/TK: {folio}\nSucursal: {sucursal}\nOficina: {oficina}\n\nSe adjunta el documento PDF con la evidencia.")
+        msg['To'] = ", ".join(list(set(destinatarios))) # Evitar duplicados
+        msg.set_content(f"Se ha generado un nuevo reporte múltiple.\n\nFecha Ejecución: {fecha_ejec}\nOficina: {oficina}\nCliente: {cliente}\nFolio: {folio}\nSucursal: {sucursal}")
         
         msg.add_attachment(pdf_bytes, maintype='application', subtype='pdf', filename=nombre_archivo)
 
@@ -119,205 +99,125 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, 
             smtp.send_message(msg)
         return True
     except Exception as e:
-        print(f"Error de correo: {e}")
+        print(f"Error: {e}")
         return False
 
 # --- INTERFAZ ---
 st.title("📑 Sistema de Evidencia Técnica BESCO")
 
 st.subheader("1. Identificación General del Servicio")
-col_cl1, col_cl2, col_cl3 = st.columns([2, 1, 1])
-cliente = col_cl1.text_input("Cliente")
-folio = col_cl2.text_input("Folio / OT / TK")
-estado_op = col_cl3.selectbox("Estado Global de Operación", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], index=4)
+c_g1, c_g2, c_g3, c_g4 = st.columns([2, 1, 1, 1.5])
+cliente = c_g1.text_input("Cliente")
+folio = c_g2.text_input("Folio / OT / TK")
+estado_op = c_g3.selectbox("Estado Global", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], index=4)
+fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
-oficina = col_loc2.text_input("Oficina / Área específica")
 
-c1, c2, c3, c4 = st.columns(4)
-tecnico = c1.text_input("Técnico Asignado")
-supervisor = c2.text_input("Supervisor")
-tipo_serv = c3.selectbox("Servicio", ["Preventivo", "Correctivo", "Emergencia"])
-referencia = c4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
+# --- LISTA DESPLEGABLE DE OFICINAS ACTUALIZADA ---
+oficina = col_loc2.selectbox("Oficina Responsable", [
+    "Acapulco", 
+    "Toluca", 
+    "Pachuca", 
+    "Michoacán", 
+    "Zonas/ CDMX", 
+    "CDMX"
+])
+
+c_t1, c_t2, c_t3, c_t4 = st.columns(4)
+tecnico = c_t1.text_input("Técnico Asignado")
+supervisor = c_t2.text_input("Supervisor")
+tipo_serv = c_t3.selectbox("Servicio", ["Preventivo", "Correctivo", "Emergencia"])
+referencia = c_t4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
 
 st.markdown("---")
 
 st.subheader("2. Equipos a Reportar")
-num_equipos = st.number_input("¿Cuántos equipos diferentes se atendieron?", min_value=1, max_value=20, value=1)
+num_equipos = st.number_input("¿Cuántos equipos se atendieron?", min_value=1, max_value=20, value=1)
 
 equipos_data = []
-
 for i in range(num_equipos):
     st.markdown(f"### ⚙️ DETALLES DEL EQUIPO {i+1}")
-    
-    esp = st.selectbox("Categoría de Equipo", ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Plantas de Emergencia", "Transformadores", "Otros"], key=f"esp_{i}")
-
-    mediciones = {}
-    otros_detalles = "" 
-
+    esp = st.selectbox("Categoría", ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Otros"], key=f"esp_{i}")
+    meds, otros = {}, ""
     if esp == "Aire Acondicionado":
         cols = st.columns(4)
-        mediciones['P. Succión'] = cols[0].text_input("Succión (PSI)", key=f"suc_{i}")
-        mediciones['P. Descarga'] = cols[1].text_input("Descarga (PSI)", key=f"des_{i}")
-        mediciones['T. Salida'] = cols[2].text_input("Salida (°C)", key=f"sal_{i}")
-        mediciones['Amp. Comp.'] = cols[3].text_input("Amperaje (A)", key=f"amp_{i}")
-    elif esp == "Tableros Eléctricos":
-        cols = st.columns(3)
-        mediciones['V L1-L2'] = cols[0].text_input("V L1-L2", key=f"v_{i}")
-        mediciones['Amp A'] = cols[1].text_input("Amp A", key=f"ampa_{i}")
-        mediciones['Amp B'] = cols[2].text_input("Amp B", key=f"ampb_{i}")
+        meds['Succión'] = cols[0].text_input("Succión", key=f"s_{i}")
+        meds['Descarga'] = cols[1].text_input("Descarga", key=f"d_{i}")
+        meds['Salida'] = cols[2].text_input("Salida", key=f"t_{i}")
+        meds['Amperaje'] = cols[3].text_input("Amp", key=f"a_{i}")
     elif esp == "Otros":
-        otros_detalles = st.text_area("Especifique detalles/mediciones:", key=f"otr_{i}")
+        otros = st.text_area("Detalles/Mediciones:", key=f"o_{i}")
 
-    c_eq1, c_eq2, c_eq3 = st.columns(3)
-    tag = c_eq1.text_input("TAG", key=f"tag_{i}")
-    marca = c_eq2.text_input("Marca/Modelo", key=f"mar_{i}")
-    capacidad = c_eq3.text_input("Capacidad", key=f"cap_{i}")
-
-    comentarios = st.text_area("Comentarios y Observaciones", key=f"com_{i}")
-
-    f_antes = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"f_ant_{i}")
-    f_despues = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"f_des_{i}")
+    ca1, ca2, ca3 = st.columns(3)
+    tag, marca, cap = ca1.text_input("TAG", key=f"tg_{i}"), ca2.text_input("Marca", key=f"mr_{i}"), ca3.text_input("Capacidad", key=f"cp_{i}")
+    com = st.text_area("Comentarios", key=f"com_{i}")
+    fa, fd = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"fa_{i}"), st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"fd_{i}")
     
-    equipos_data.append({
-        "numero": i + 1,
-        "esp": esp,
-        "mediciones": mediciones,
-        "otros_detalles": otros_detalles,
-        "tag": tag,
-        "marca": marca,
-        "capacidad": capacidad,
-        "comentarios": comentarios,
-        "f_antes": f_antes,
-        "f_despues": f_despues
-    })
+    equipos_data.append({"numero": i+1, "esp": esp, "meds": meds, "otros": otros, "tag": tag, "marca": marca, "cap": cap, "com": com, "fa": fa, "fd": fd})
     st.markdown("---")
 
-st.subheader("3. Materiales Utilizados (Global)")
+st.subheader("3. Materiales y Documentación")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
-
-st.subheader("4. Evidencia Documental (Reporte Físico)")
-st.info("📌 Cargue aquí una fotografía o un archivo PDF del reporte físico firmado y sellado por el cliente que ampara esta visita.")
-f_folio = st.file_uploader("FOLIO BESCO", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=False)
+f_folio = st.file_uploader("FOLIO BESCO (Firmado)", type=["jpg", "jpeg", "png", "pdf"])
 
 st.markdown("---")
-st.subheader("5. Envío de Reporte")
-st.info("💡 Tu reporte siempre se enviará a gerardo.mendez@besco.mx por seguridad.")
-correos_adicionales = st.text_input("Agregar destinatarios extra (separe los correos con una coma)", placeholder="ejemplo@cliente.com")
+st.subheader("4. Envío de Reporte")
 
-if st.button("🚀 Generar Reporte Final Múltiple", type="primary"):
+# --- LÓGICA DE ASIGNACIÓN DE CORREOS SEGÚN OFICINA ---
+mapeo_correos = {
+    "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
+    "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
+    "Pachuca": ["german.constantino@besco.mx"],
+    "Michoacán": ["cristobal.rodriguez@besco.mx", "ximena.acosta@besco.mx", "javier.zamano@besco.mx"],
+    "Zonas/ CDMX": ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"],
+    "CDMX": ["gerardo.mendez@besco.mx"]
+}
+
+destinatarios_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
+if "gerardo.mendez@besco.mx" not in destinatarios_oficina:
+    destinatarios_oficina.append("gerardo.mendez@besco.mx")
+
+st.info(f"📧 Responsables que recibirán este reporte: {', '.join(destinatarios_oficina)}")
+correos_extra = st.text_input("Correos adicionales (opcional)")
+
+if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
-    
-    pdf.add_custom_section("Información General del Servicio")
+    pdf.add_custom_section("Información General")
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
-    
-    loc_str = ""
-    if sucursal: loc_str += f"Sucursal: {sucursal} "
-    if oficina: loc_str += f"| Oficina: {oficina}"
-    if loc_str: pdf.cell(0, 7, loc_str, 0, 1)
-
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(0, 7, f"ESTADO GLOBAL DE OPERACIÓN: {estado_op}/10", 0, 1)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia}) | Técnico: {tecnico}", 0, 1)
+    f_ejec_str = fecha_ejecucion.strftime('%d/%m/%Y')
+    pdf.cell(0, 7, f"Fecha de Ejecución: {f_ejec_str} | Oficina: {oficina}", 0, 1)
+    if sucursal: pdf.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
     pdf.ln(5)
 
     for eq in equipos_data:
         if pdf.get_y() > 240: pdf.add_page()
-        
         pdf.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
-        
-        if eq['tag'] or eq['marca']:
-            pdf.set_font('Arial', 'B', 9)
-            pdf.cell(0, 7, f"TAG: {eq['tag']} | Modelo: {eq['marca']} | Capacidad: {eq['capacidad']}", 0, 1)
-            pdf.set_font('Arial', '', 10)
-
-        valid_meds = {k: v for k, v in eq['mediciones'].items() if v}
-        if valid_meds:
-            for k, v in valid_meds.items():
-                pdf.cell(60, 6, f"{k}:", 1); pdf.cell(130, 6, f"{v}", 1, 1)
-            pdf.ln(2)
-        
-        if eq['esp'] == "Otros" and eq['otros_detalles']:
-            pdf.multi_cell(0, 6, f"Detalles: {eq['otros_detalles']}", 1); pdf.ln(2)
-
-        if eq['comentarios']:
-            pdf.multi_cell(0, 6, f"Comentarios: {eq['comentarios']}", 1); pdf.ln(2)
-
-        if eq['f_antes']: pdf.photo_grid(f"Evidencia Antes (Eq. {eq['numero']})", eq['f_antes'], eq['numero'])
-        if eq['f_despues']: pdf.photo_grid(f"Evidencia Después (Eq. {eq['numero']})", eq['f_despues'], eq['numero'])
-        pdf.ln(5)
-
-    df_c = df_mat.dropna(subset=["Descripción"])
-    if not df_c.empty:
-        if pdf.get_y() > 220: pdf.add_page()
-        pdf.add_custom_section("Materiales Utilizados (Global)")
-        pdf.set_font('Arial', 'B', 9)
-        pdf.cell(30, 7, "CANT.", 1, 0, 'C')
-        pdf.cell(160, 7, "DESCRIPCIÓN", 1, 1, 'C')
-        pdf.set_font('Arial', '', 9)
-        for _, row in df_c.iterrows():
-            pdf.cell(30, 7, str(row["Cantidad"]), 1); pdf.cell(160, 7, str(row["Descripción"]), 1, 1)
+        if eq['tag']: pdf.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1)
+        valid_meds = {k: v for k, v in eq['meds'].items() if v}
+        for k, v in valid_meds.items():
+            pdf.cell(60, 6, f"{k}:", 1); pdf.cell(130, 6, f"{v}", 1, 1)
+        if eq['otros']: pdf.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
+        if eq['com']: pdf.multi_cell(0, 6, f"Comentarios: {eq['com']}", 1)
+        pdf.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'])
+        pdf.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'])
 
     if f_folio and not f_folio.name.lower().endswith('.pdf'):
-        pdf.add_page()
-        pdf.add_custom_section("FOLIO BESCO (Reporte Firmado y Sellado)")
+        pdf.add_page(); pdf.add_custom_section("FOLIO BESCO (Firmado)")
         img = Image.open(f_folio).convert("RGB")
-        temp_folio = "temp_folio_full.jpg"
-        img.save(temp_folio)
-        
-        y_start = pdf.get_y()
-        avail_w = 190
-        avail_h = 280 - y_start
-        
-        img_w, img_h = img.size
-        escala = min(avail_w/img_w, avail_h/img_h)
-        final_w = img_w * escala
-        final_h = img_h * escala
-        x_pos = 10 + (190 - final_w) / 2  
-        
-        pdf.image(temp_folio, x=x_pos, y=y_start, w=final_w, h=final_h)
+        temp_f = "temp_folio.jpg"; img.save(temp_f)
+        pdf.image(temp_f, x=10, y=pdf.get_y(), w=190)
 
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
-    
     if f_folio and f_folio.name.lower().endswith('.pdf'):
-        merger = PdfWriter()
-        merger.append(io.BytesIO(pdf_bytes))
-        merger.append(f_folio)
-        salida_pdf = io.BytesIO()
-        merger.write(salida_pdf)
-        pdf_bytes = salida_pdf.getvalue()
+        merger = PdfWriter(); merger.append(io.BytesIO(pdf_bytes)); merger.append(f_folio)
+        out = io.BytesIO(); merger.write(out); pdf_bytes = out.getvalue()
 
-    # --- NUEVO NOMBRE DE ARCHIVO PDF ---
-    # Limpiamos los espacios en blanco adicionales para que el nombre del archivo se vea prolijo
-    nom_cliente = cliente.strip() if cliente else "SinCliente"
-    nom_folio = folio.strip() if folio else "SinFolio"
-    nom_sucursal = f"_{sucursal.strip()}" if sucursal else ""
-    nom_oficina = f"_{oficina.strip()}" if oficina else ""
+    nom_archivo = f"Reporte_BESCO_{cliente}_{folio}_{oficina}.pdf".replace(" ", "_")
+    if enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nom_archivo, correos_extra, f_ejec_str, destinatarios_oficina):
+        st.success(f"✅ Reporte enviado con éxito a los responsables.")
     
-    # El archivo se llamará: Reporte_BESCO_Cliente_Folio_Sucursal_Oficina.pdf
-    # Ejemplo: Reporte_BESCO_Banamex_TK-9999_Centro_Piso2.pdf
-    nombre_pdf = f"Reporte_BESCO_{nom_cliente}_{nom_folio}{nom_sucursal}{nom_oficina}.pdf"
-    
-    # Quitamos caracteres que podrían dar error en el nombre del archivo de Windows
-    nombre_pdf = nombre_pdf.replace(" ", "_").replace("/", "-").replace("\\", "-")
-    
-    if "EMAIL_SENDER" in st.secrets:
-        # Pasamos el nombre del archivo a la función de correo
-        exito = enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_pdf, correos_adicionales)
-        if exito:
-            st.success(f"✅ ¡Reporte Listo y enviado a los destinatarios!")
-        else:
-            st.warning("El reporte se generó pero hubo un error al enviar el correo.")
-    else:
-        st.warning("⚠️ Reporte generado. (El envío por correo está inactivo).")
-
-    st.download_button(
-        label="📥 Descargar PDF a mi Celular",
-        data=pdf_bytes,
-        file_name=nombre_pdf,
-        mime="application/pdf"
-    )
+    st.download_button("📥 Descargar Copia PDF", data=pdf_bytes, file_name=nom_archivo, mime="application/pdf")
