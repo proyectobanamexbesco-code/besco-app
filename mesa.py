@@ -89,7 +89,7 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, 
         
         msg['Subject'] = asunto
         msg['From'] = remitente
-        msg['To'] = ", ".join(list(set(destinatarios))) # Evitar duplicados
+        msg['To'] = ", ".join(list(set(destinatarios))) 
         msg.set_content(f"Se ha generado un nuevo reporte múltiple.\n\nFecha Ejecución: {fecha_ejec}\nOficina: {oficina}\nCliente: {cliente}\nFolio: {folio}\nSucursal: {sucursal}")
         
         msg.add_attachment(pdf_bytes, maintype='application', subtype='pdf', filename=nombre_archivo)
@@ -114,8 +114,6 @@ fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
-
-# --- LISTA DESPLEGABLE DE OFICINAS ---
 oficina = col_loc2.selectbox("Oficina Responsable", [
     "Acapulco", 
     "Toluca", 
@@ -133,7 +131,14 @@ referencia = c_t4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
 
 st.markdown("---")
 
-st.subheader("2. Equipos a Reportar")
+# --- NUEVA SECCIÓN 2: CARGA DE FOLIO BESCO ---
+st.subheader("2. Evidencia Documental (Reporte Físico)")
+st.info("📌 Cargue aquí una fotografía o un archivo PDF del reporte físico firmado y sellado por el cliente.")
+f_folio = st.file_uploader("FOLIO BESCO (Firmado)", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=False)
+
+st.markdown("---")
+
+st.subheader("3. Equipos a Reportar")
 num_equipos = st.number_input("¿Cuántos equipos se atendieron?", min_value=1, max_value=20, value=1)
 
 equipos_data = []
@@ -158,14 +163,12 @@ for i in range(num_equipos):
     equipos_data.append({"numero": i+1, "esp": esp, "meds": meds, "otros": otros, "tag": tag, "marca": marca, "cap": cap, "com": com, "fa": fa, "fd": fd})
     st.markdown("---")
 
-st.subheader("3. Materiales y Documentación")
+st.subheader("4. Materiales Utilizados (Global)")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
-f_folio = st.file_uploader("FOLIO BESCO (Firmado)", type=["jpg", "jpeg", "png", "pdf"])
 
 st.markdown("---")
-st.subheader("4. Envío de Reporte")
+st.subheader("5. Envío de Reporte")
 
-# --- LÓGICA DE ASIGNACIÓN DE CORREOS SEGÚN OFICINA ---
 mapeo_correos = {
     "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
     "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
@@ -186,7 +189,6 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
     
-    # --- CORRECCIÓN: IMPRESIÓN DE TODOS LOS DATOS GENERALES EN EL PDF ---
     pdf.add_custom_section("Información General")
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
@@ -204,7 +206,6 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1)
     pdf.cell(0, 7, f"Técnico Asignado: {tecnico} | Supervisor: {supervisor}", 0, 1)
     pdf.ln(5)
-    # --------------------------------------------------------------------
 
     for eq in equipos_data:
         if pdf.get_y() > 240: pdf.add_page()
@@ -222,7 +223,17 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
         pdf.add_page(); pdf.add_custom_section("FOLIO BESCO (Firmado)")
         img = Image.open(f_folio).convert("RGB")
         temp_f = "temp_folio.jpg"; img.save(temp_f)
-        pdf.image(temp_f, x=10, y=pdf.get_y(), w=190)
+        
+        y_start = pdf.get_y()
+        avail_w = 190
+        avail_h = 280 - y_start
+        img_w, img_h = img.size
+        escala = min(avail_w/img_w, avail_h/img_h)
+        final_w = img_w * escala
+        final_h = img_h * escala
+        x_pos = 10 + (190 - final_w) / 2  
+        
+        pdf.image(temp_f, x=x_pos, y=y_start, w=final_w, h=final_h)
 
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     if f_folio and f_folio.name.lower().endswith('.pdf'):
