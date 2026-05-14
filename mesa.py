@@ -71,6 +71,31 @@ class BESCO_PDF(FPDF):
             if col == 1 or i == len(photos) - 1: self.set_y(y_act + espacio_v)
         self.ln(5)
 
+    def folio_grid(self, title, photos):
+        if not photos: return
+        self.add_page()
+        self.add_custom_section(title)
+        for i, foto in enumerate(photos[:4]): # Límite de 4 fotos
+            img = Image.open(foto).convert("RGB")
+            temp_folio = f"temp_folio_{int(time.time()*1000)}_{i}.jpg"
+            img.save(temp_folio)
+            
+            y_start = self.get_y()
+            if y_start > 250: # Si no cabe, nueva página
+                self.add_page()
+                y_start = self.get_y()
+
+            avail_w = 190
+            avail_h = 280 - y_start
+            img_w, img_h = img.size
+            escala = min(avail_w/img_w, avail_h/img_h)
+            final_w = img_w * escala
+            final_h = img_h * escala
+            x_pos = 10 + (190 - final_w) / 2  
+            
+            self.image(temp_folio, x=x_pos, y=y_start, w=final_w, h=final_h)
+            self.add_page() # Forzamos nueva página para la siguiente foto completa
+
 # --- FUNCIÓN DE CORREO AUTOMÁTICO CON ENRUTAMIENTO ---
 def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, correos_extra, fecha_ejec, lista_destinatarios):
     try:
@@ -131,10 +156,12 @@ referencia = c_t4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
 
 st.markdown("---")
 
-# --- NUEVA SECCIÓN 2: CARGA DE FOLIO BESCO ---
 st.subheader("2. Evidencia Documental (Reporte Físico)")
-st.info("📌 Cargue aquí una fotografía o un archivo PDF del reporte físico firmado y sellado por el cliente.")
-f_folio = st.file_uploader("FOLIO BESCO (Firmado)", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=False)
+st.info("📌 Cargue hasta 4 fotografías del reporte físico firmado y sellado por el cliente.")
+# --- MODIFICACIÓN: ACEPTA MÚLTIPLES FOTOS, RESTRINGIDO A IMÁGENES ---
+fotos_folio = st.file_uploader("Fotos FOLIO BESCO", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+if len(fotos_folio) > 4:
+    st.warning("⚠️ Solo se procesarán las primeras 4 fotografías.")
 
 st.markdown("---")
 
@@ -207,38 +234,33 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf.cell(0, 7, f"Técnico Asignado: {tecnico} | Supervisor: {supervisor}", 0, 1)
     pdf.ln(5)
 
+    # --- MODIFICACIÓN: ORDEN ESTRICTO DE CAPTURA EN EL PDF ---
     for eq in equipos_data:
         if pdf.get_y() > 240: pdf.add_page()
+        
+        # 1. Título y Detalles del Equipo
         pdf.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
         if eq['tag']: pdf.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1)
+        
+        # 2. Mediciones
         valid_meds = {k: v for k, v in eq['meds'].items() if v}
         for k, v in valid_meds.items():
             pdf.cell(60, 6, f"{k}:", 1); pdf.cell(130, 6, f"{v}", 1, 1)
+        
+        # 3. Comentarios / Detalles (Inmediatamente después)
         if eq['otros']: pdf.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
         if eq['com']: pdf.multi_cell(0, 6, f"Comentarios: {eq['com']}", 1)
+        
+        # 4. Fotografías (Evidencia visual)
         pdf.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'])
         pdf.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'])
+        pdf.ln(5)
 
-    if f_folio and not f_folio.name.lower().endswith('.pdf'):
-        pdf.add_page(); pdf.add_custom_section("FOLIO BESCO (Firmado)")
-        img = Image.open(f_folio).convert("RGB")
-        temp_f = "temp_folio.jpg"; img.save(temp_f)
-        
-        y_start = pdf.get_y()
-        avail_w = 190
-        avail_h = 280 - y_start
-        img_w, img_h = img.size
-        escala = min(avail_w/img_w, avail_h/img_h)
-        final_w = img_w * escala
-        final_h = img_h * escala
-        x_pos = 10 + (190 - final_w) / 2  
-        
-        pdf.image(temp_f, x=x_pos, y=y_start, w=final_w, h=final_h)
+    # --- INSERCIÓN DEL FOLIO BESCO EN FORMATO "FOTO COMPLETA" ---
+    if fotos_folio:
+        pdf.folio_grid("FOLIO BESCO (Firmado)", fotos_folio)
 
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
-    if f_folio and f_folio.name.lower().endswith('.pdf'):
-        merger = PdfWriter(); merger.append(io.BytesIO(pdf_bytes)); merger.append(f_folio)
-        out = io.BytesIO(); merger.write(out); pdf_bytes = out.getvalue()
 
     nom_archivo = f"Reporte_BESCO_{cliente}_{folio}_{oficina}.pdf".replace(" ", "_")
     if enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nom_archivo, correos_extra, f_ejec_str, destinatarios_oficina):
