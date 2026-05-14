@@ -8,7 +8,6 @@ import smtplib
 from email.message import EmailMessage
 import io
 import time
-from pypdf import PdfWriter
 
 # --- RUTAS PARA LA NUBE ---
 LOGO_PATH = "logo besco 2026.jpeg"
@@ -75,13 +74,14 @@ class BESCO_PDF(FPDF):
         if not photos: return
         self.add_page()
         self.add_custom_section(title)
-        for i, foto in enumerate(photos[:4]): # Límite de 4 fotos
+        fotos_a_procesar = photos[:4] # Tope de 4 fotos
+        for i, foto in enumerate(fotos_a_procesar):
             img = Image.open(foto).convert("RGB")
             temp_folio = f"temp_folio_{int(time.time()*1000)}_{i}.jpg"
             img.save(temp_folio)
             
             y_start = self.get_y()
-            if y_start > 250: # Si no cabe, nueva página
+            if y_start > 250: 
                 self.add_page()
                 y_start = self.get_y()
 
@@ -94,7 +94,10 @@ class BESCO_PDF(FPDF):
             x_pos = 10 + (190 - final_w) / 2  
             
             self.image(temp_folio, x=x_pos, y=y_start, w=final_w, h=final_h)
-            self.add_page() # Forzamos nueva página para la siguiente foto completa
+            
+            # Solo agregar salto de página si falta otra foto de folio
+            if i < len(fotos_a_procesar) - 1:
+                self.add_page()
 
 # --- FUNCIÓN DE CORREO AUTOMÁTICO CON ENRUTAMIENTO ---
 def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, correos_extra, fecha_ejec, lista_destinatarios):
@@ -145,7 +148,11 @@ oficina = col_loc2.selectbox("Oficina Responsable", [
     "Pachuca", 
     "Michoacán", 
     "Zonas/ CDMX", 
-    "CDMX"
+    "CDMX",
+    "Ben & Company",
+    "BX+",
+    "Emerson",
+    "Odoo"
 ])
 
 c_t1, c_t2, c_t3, c_t4 = st.columns(4)
@@ -158,7 +165,6 @@ st.markdown("---")
 
 st.subheader("2. Evidencia Documental (Reporte Físico)")
 st.info("📌 Cargue hasta 4 fotografías del reporte físico firmado y sellado por el cliente.")
-# --- MODIFICACIÓN: ACEPTA MÚLTIPLES FOTOS, RESTRINGIDO A IMÁGENES ---
 fotos_folio = st.file_uploader("Fotos FOLIO BESCO", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 if len(fotos_folio) > 4:
     st.warning("⚠️ Solo se procesarán las primeras 4 fotografías.")
@@ -202,7 +208,11 @@ mapeo_correos = {
     "Pachuca": ["german.constantino@besco.mx"],
     "Michoacán": ["cristobal.rodriguez@besco.mx", "ximena.acosta@besco.mx", "javier.zamano@besco.mx"],
     "Zonas/ CDMX": ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"],
-    "CDMX": ["gerardo.mendez@besco.mx"]
+    "CDMX": ["gerardo.mendez@besco.mx"],
+    "Ben & Company": ["gerardo.mendez@besco.mx"],
+    "BX+": ["gerardo.mendez@besco.mx"],
+    "Emerson": ["gerardo.mendez@besco.mx"],
+    "Odoo": ["gerardo.mendez@besco.mx"]
 }
 
 destinatarios_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
@@ -216,6 +226,7 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
     
+    # --- RESTAURACIÓN Y MEJORA: INFORMACIÓN GENERAL Y PERSONAL ---
     pdf.add_custom_section("Información General")
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
@@ -229,34 +240,46 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(0, 7, f"ESTADO GLOBAL DE OPERACIÓN: {estado_op}/10", 0, 1)
     
+    # Textos en Negritas para asegurar la visualización del Técnico y Supervisor
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(0, 7, f"Técnico Asignado: {tecnico} | Supervisor: {supervisor}", 0, 1)
+    
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1)
-    pdf.cell(0, 7, f"Técnico Asignado: {tecnico} | Supervisor: {supervisor}", 0, 1)
     pdf.ln(5)
 
-    # --- MODIFICACIÓN: ORDEN ESTRICTO DE CAPTURA EN EL PDF ---
     for eq in equipos_data:
         if pdf.get_y() > 240: pdf.add_page()
         
-        # 1. Título y Detalles del Equipo
         pdf.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
         if eq['tag']: pdf.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1)
         
-        # 2. Mediciones
         valid_meds = {k: v for k, v in eq['meds'].items() if v}
         for k, v in valid_meds.items():
             pdf.cell(60, 6, f"{k}:", 1); pdf.cell(130, 6, f"{v}", 1, 1)
-        
-        # 3. Comentarios / Detalles (Inmediatamente después)
+            
         if eq['otros']: pdf.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
         if eq['com']: pdf.multi_cell(0, 6, f"Comentarios: {eq['com']}", 1)
         
-        # 4. Fotografías (Evidencia visual)
         pdf.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'])
         pdf.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'])
         pdf.ln(5)
 
-    # --- INSERCIÓN DEL FOLIO BESCO EN FORMATO "FOTO COMPLETA" ---
+    # --- RESTAURACIÓN: MATERIALES UTILIZADOS ---
+    df_c = df_mat.dropna(subset=["Descripción"])
+    if not df_c.empty:
+        if pdf.get_y() > 220: pdf.add_page()
+        pdf.add_custom_section("Materiales Utilizados (Global)")
+        pdf.set_font('Arial', 'B', 9)
+        pdf.cell(30, 7, "CANT.", 1, 0, 'C')
+        pdf.cell(160, 7, "DESCRIPCIÓN", 1, 1, 'C')
+        pdf.set_font('Arial', '', 9)
+        for _, row in df_c.iterrows():
+            pdf.cell(30, 7, str(row["Cantidad"]), 1)
+            pdf.cell(160, 7, str(row["Descripción"]), 1, 1)
+        pdf.ln(5)
+
+    # --- FOLIO BESCO AL FINAL ---
     if fotos_folio:
         pdf.folio_grid("FOLIO BESCO (Firmado)", fotos_folio)
 
