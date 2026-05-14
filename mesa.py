@@ -115,7 +115,7 @@ fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
 
-# --- LISTA DESPLEGABLE DE OFICINAS ACTUALIZADA ---
+# --- LISTA DESPLEGABLE DE OFICINAS ---
 oficina = col_loc2.selectbox("Oficina Responsable", [
     "Acapulco", 
     "Toluca", 
@@ -185,13 +185,26 @@ correos_extra = st.text_input("Correos adicionales (opcional)")
 if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
+    
+    # --- CORRECCIÓN: IMPRESIÓN DE TODOS LOS DATOS GENERALES EN EL PDF ---
     pdf.add_custom_section("Información General")
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
+    
     f_ejec_str = fecha_ejecucion.strftime('%d/%m/%Y')
     pdf.cell(0, 7, f"Fecha de Ejecución: {f_ejec_str} | Oficina: {oficina}", 0, 1)
-    if sucursal: pdf.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
+    
+    if sucursal: 
+        pdf.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
+    
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(0, 7, f"ESTADO GLOBAL DE OPERACIÓN: {estado_op}/10", 0, 1)
+    
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1)
+    pdf.cell(0, 7, f"Técnico Asignado: {tecnico} | Supervisor: {supervisor}", 0, 1)
     pdf.ln(5)
+    # --------------------------------------------------------------------
 
     for eq in equipos_data:
         if pdf.get_y() > 240: pdf.add_page()
