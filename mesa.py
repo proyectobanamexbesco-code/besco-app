@@ -8,6 +8,7 @@ import smtplib
 from email.message import EmailMessage
 import io
 import time
+import uuid
 from pypdf import PdfWriter
 
 # --- RUTAS PARA LA NUBE ---
@@ -51,21 +52,27 @@ class BESCO_PDF(FPDF):
         self.ln(2)
         self.set_text_color(0, 0, 0)
 
-    def photo_grid(self, title, photos, eq_index=0):
+    def photo_grid(self, title, photos, eq_index=0, prefix="img"):
         if not photos: return
         self.add_custom_section(title)
         ancho_foto, alto_foto, espacio_v, margen_inf = 90, 65, 75, 280
+        
         for i, foto in enumerate(photos):
+            # Blindaje para asegurar que la foto se lea desde cero y no se mezcle
+            foto.seek(0)
             img = Image.open(foto).convert("RGB")
-            id_f = title.replace(" ", "_")
-            temp_p = f"temp_{id_f}_eq{eq_index}_{int(time.time()*1000)}_{i}.jpg"
+            
+            # Nombre de archivo único garantizado para evitar sobreescritura (Antes/Después)
+            temp_p = f"temp_{prefix}_{uuid.uuid4().hex}.jpg"
             img.save(temp_p)
+            
             col = i % 2
             if col == 0 and self.get_y() + espacio_v > margen_inf:
                 self.add_page()
                 self.set_font('Arial', 'I', 9); self.set_text_color(100, 100, 100)
                 self.cell(0, 6, f"(Continuación) {title}", 0, 1, 'L')
                 self.set_text_color(0, 0, 0); self.ln(2)
+                
             y_act = self.get_y()
             self.image(temp_p, x=10 + (col * 95), y=y_act, w=ancho_foto, h=alto_foto)
             if col == 1 or i == len(photos) - 1: self.set_y(y_act + espacio_v)
@@ -76,8 +83,9 @@ class BESCO_PDF(FPDF):
         for i, foto in enumerate(photo_files[:4]):
             self.add_page()
             self.add_custom_section(f"{title} - Evidencia {i+1}")
+            foto.seek(0)
             img = Image.open(foto).convert("RGB")
-            temp_folio = f"temp_folio_{int(time.time()*1000)}_{i}.jpg"
+            temp_folio = f"temp_folio_{uuid.uuid4().hex}.jpg"
             img.save(temp_folio)
             
             avail_w, avail_h = 190, 240
@@ -129,7 +137,6 @@ referencia = c_t4.selectbox("Referencia", ["Con Ticket", "Sin Ticket"])
 
 st.markdown("---")
 
-# --- SECCIÓN 2: CARGA HÍBRIDA (JPG Y/O PDF) ---
 st.subheader("2. Evidencia Documental (Reporte Físico)")
 st.info("📌 Puede subir hasta 4 fotos (JPG/PNG) y/o archivos PDF del reporte firmado.")
 archivos_folio = st.file_uploader("Subir Folio BESCO", type=["jpg", "jpeg", "png", "pdf"], accept_multiple_files=True)
@@ -144,6 +151,8 @@ for i in range(num_equipos):
     with st.expander(f"CONFIGURACIÓN EQUIPO {i+1}", expanded=True):
         esp = st.selectbox("Categoría", ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Otros"], key=f"esp_{i}")
         meds, otros = {}, ""
+        
+        # 1. Mediciones (En la interfaz se capturan primero)
         if esp == "Aire Acondicionado":
             cols = st.columns(4)
             meds['Succión'] = cols[0].text_input("Succión", key=f"s_{i}")
@@ -152,10 +161,20 @@ for i in range(num_equipos):
             meds['Amperaje'] = cols[3].text_input("Amp", key=f"a_{i}")
         elif esp == "Otros":
             otros = st.text_area("Detalles/Mediciones:", key=f"o_{i}")
+            
+        # 2. Datos del Equipo
         ca1, ca2, ca3 = st.columns(3)
-        tag, marca, cap = ca1.text_input("TAG", key=f"tg_{i}"), ca2.text_input("Marca", key=f"mr_{i}"), ca3.text_input("Capacidad", key=f"cp_{i}")
+        tag = ca1.text_input("TAG", key=f"tg_{i}")
+        marca = ca2.text_input("Marca", key=f"mr_{i}")
+        cap = ca3.text_input("Capacidad", key=f"cp_{i}")
+        
+        # 3. Comentarios
         com = st.text_area("Comentarios", key=f"com_{i}")
-        fa, fd = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"fa_{i}"), st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"fd_{i}")
+        
+        # 4. Evidencia
+        fa = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"fa_{i}")
+        fd = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"fd_{i}")
+        
         equipos_data.append({"numero": i+1, "esp": esp, "meds": meds, "otros": otros, "tag": tag, "marca": marca, "cap": cap, "com": com, "fa": fa, "fd": fd})
 
 st.subheader("4. Materiales Utilizados")
@@ -182,6 +201,8 @@ correos_extra = st.text_input("Correos adicionales (separados por coma)")
 if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf = BESCO_PDF()
     pdf.add_page()
+    
+    # Información General
     pdf.add_custom_section("Información General")
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Cliente: {cliente} | Folio: {folio}", 0, 1)
@@ -194,16 +215,35 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
     pdf.set_font('Arial', '', 10)
     pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1); pdf.ln(5)
 
+    # --- REORDENAMIENTO ESTRICTO EN EL PDF ---
     for eq in equipos_data:
         if pdf.get_y() > 240: pdf.add_page()
         pdf.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
-        if eq['tag']: pdf.set_font('Arial', 'B', 9); pdf.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1); pdf.set_font('Arial', '', 10)
-        for k, v in {k: v for k, v in eq['meds'].items() if v}.items(): pdf.cell(60, 6, f"{k}:", 1); pdf.cell(130, 6, f"{v}", 1, 1)
-        if eq['otros']: pdf.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
-        if eq['com']: pdf.multi_cell(0, 6, f"Comentarios: {eq['com']}", 1)
-        pdf.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'])
-        pdf.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero']); pdf.ln(5)
+        
+        # 1. Mediciones primero
+        valid_meds = {k: v for k, v in eq['meds'].items() if v}
+        for k, v in valid_meds.items(): 
+            pdf.cell(60, 6, f"{k}:", 1)
+            pdf.cell(130, 6, f"{v}", 1, 1)
+        if eq['otros']: 
+            pdf.multi_cell(0, 6, f"Detalles: {eq['otros']}", 1)
+            
+        # 2. TAG, Marca y Capacidad después
+        if eq['tag'] or eq['marca'] or eq['cap']: 
+            pdf.set_font('Arial', 'B', 9)
+            pdf.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1)
+            pdf.set_font('Arial', '', 10)
+            
+        # 3. Comentarios
+        if eq['com']: 
+            pdf.multi_cell(0, 6, f"Comentarios: {eq['com']}", 1)
+            
+        # 4. Fotografías (Llamadas seguras con prefijo único)
+        pdf.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'], "antes")
+        pdf.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'], "despues")
+        pdf.ln(5)
 
+    # Materiales
     df_c = df_mat.dropna(subset=["Descripción"])
     if not df_c.empty:
         if pdf.get_y() > 220: pdf.add_page()
@@ -211,13 +251,12 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
         pdf.set_font('Arial', 'B', 9); pdf.cell(30, 7, "CANT.", 1, 0, 'C'); pdf.cell(160, 7, "DESCRIPCIÓN", 1, 1, 'C'); pdf.set_font('Arial', '', 9)
         for _, row in df_c.iterrows(): pdf.cell(30, 7, str(row["Cantidad"]), 1); pdf.cell(160, 7, str(row["Descripción"]), 1, 1)
 
-    # --- PROCESAMIENTO DE FOLIO (FOTOS) ---
+    # Procesamiento Híbrido Folio
     fotos_folio = [f for f in archivos_folio if f.type in ["image/jpeg", "image/png"]]
     if fotos_folio: pdf.folio_grid("FOLIO BESCO", fotos_folio)
 
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
-    # --- UNIÓN CON PDFS CARGADOS ---
     pdfs_folio = [f for f in archivos_folio if f.type == "application/pdf"]
     if pdfs_folio:
         merger = PdfWriter()
