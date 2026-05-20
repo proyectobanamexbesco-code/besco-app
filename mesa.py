@@ -7,14 +7,22 @@ import os
 import smtplib
 from email.message import EmailMessage
 import io
-import time
 import uuid
 from pypdf import PdfWriter
 
-# --- RUTAS PARA LA NUBE (LOGOTIPO BESCO) ---
-LOGO_PATH = "logo.png"
-if not os.path.exists(LOGO_PATH) and os.path.exists("logo.jpg"):
+# --- RUTAS PARA EL LOGOTIPO BESCO ---
+# Regla de directorio: Ruta absoluta para entorno local, con respaldo para la nube
+LOCAL_LOGO_PATH = r"C:\Users\GerardoMendez\OneDrive - Grupo Besco\Escritorio\MisProyectos\logo.png"
+CLOUD_LOGO_PATH = "logo.png"
+
+if os.path.exists(LOCAL_LOGO_PATH):
+    LOGO_PATH = LOCAL_LOGO_PATH
+elif os.path.exists(CLOUD_LOGO_PATH):
+    LOGO_PATH = CLOUD_LOGO_PATH
+elif os.path.exists("logo.jpg"):
     LOGO_PATH = "logo.jpg"
+else:
+    LOGO_PATH = None
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="BESCO | Evidencia Técnica", layout="wide")
@@ -34,13 +42,12 @@ class BESCO_PDF(FPDF):
         self.section_count = 1
 
     def header(self):
-        if os.path.exists(LOGO_PATH):
+        if LOGO_PATH and os.path.exists(LOGO_PATH):
             try:
                 img_logo = Image.open(LOGO_PATH).convert("RGB")
                 temp_logo = "temp_logo_principal.jpg"
                 img_logo.save(temp_logo, format="JPEG")
                 
-                # Cálculo para mantener proporción del aspecto original
                 orig_w, orig_h = img_logo.size
                 final_h = 25
                 escala = final_h / orig_h
@@ -146,7 +153,14 @@ fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
-oficina = col_loc2.selectbox("Oficina Responsable", ["Acapulco", "Toluca", "Pachuca", "Michoacán", "Zonas/ CDMX", "CDMX", "Ben & Company", "BX+", "Emerson", "Odoo"])
+
+# Lista completa de oficinas operativas
+lista_oficinas = [
+    "Monterrey", "Torreón", "Ciudad Juárez", "Reynosa", "Chihuahua", "Saltillo", "Tampico",
+    "Acapulco", "Toluca", "Pachuca", "Michoacán", "Zonas/ CDMX", "CDMX", 
+    "Ben & Company", "BX+", "Emerson", "Odoo"
+]
+oficina = col_loc2.selectbox("Oficina Responsable", lista_oficinas)
 
 c_t1, c_t2, c_t3, c_t4 = st.columns(4)
 tecnico = c_t1.text_input("Técnico Asignado")
@@ -198,17 +212,30 @@ df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_
 st.markdown("---")
 st.subheader("5. Envío de Reporte")
 
+# Mapeo de distribución según la zona seleccionada
 mapeo_correos = {
+    "Monterrey": ["gerardo.mendez@besco.mx"], 
+    "Torreón": ["gerardo.mendez@besco.mx"],
+    "Ciudad Juárez": ["gerardo.mendez@besco.mx"],
+    "Reynosa": ["gerardo.mendez@besco.mx"],
+    "Chihuahua": ["gerardo.mendez@besco.mx"],
+    "Saltillo": ["gerardo.mendez@besco.mx"],
+    "Tampico": ["gerardo.mendez@besco.mx"],
     "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
     "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
     "Pachuca": ["german.constantino@besco.mx"],
     "Michoacán": ["cristobal.rodriguez@besco.mx", "ximena.acosta@besco.mx", "javier.zamano@besco.mx"],
     "Zonas/ CDMX": ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"],
     "CDMX": ["gerardo.mendez@besco.mx"],
-    "Ben & Company": ["gerardo.mendez@besco.mx"], "BX+": ["gerardo.mendez@besco.mx"], "Emerson": ["gerardo.mendez@besco.mx"], "Odoo": ["gerardo.mendez@besco.mx"]
+    "Ben & Company": ["gerardo.mendez@besco.mx"], 
+    "BX+": ["gerardo.mendez@besco.mx"], 
+    "Emerson": ["gerardo.mendez@besco.mx"], 
+    "Odoo": ["gerardo.mendez@besco.mx"]
 }
+
 dest_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
-if "gerardo.mendez@besco.mx" not in dest_oficina: dest_oficina.append("gerardo.mendez@besco.mx")
+if "gerardo.mendez@besco.mx" not in dest_oficina: 
+    dest_oficina.append("gerardo.mendez@besco.mx")
 
 st.info(f"📧 Destinatarios automáticos: {', '.join(dest_oficina)}")
 correos_extra = st.text_input("Correos adicionales (separados por coma)")
@@ -260,20 +287,18 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
             pdf.set_font('Arial', 'B', 9); pdf.cell(30, 7, "CANT.", 1, 0, 'C'); pdf.cell(160, 7, "DESCRIPCIÓN", 1, 1, 'C'); pdf.set_font('Arial', '', 9)
             for _, row in df_c.iterrows(): pdf.cell(30, 7, str(row["Cantidad"]), 1); pdf.cell(160, 7, str(row["Descripción"]), 1, 1)
 
-        # CORRECCIÓN: Filtrar de manera flexible cualquier tipo de imagen cargada (.jpg, .jpeg, .png)
         fotos_folio = [f for f in archivos_folio if f and "image" in f.type]
         if fotos_folio: 
             pdf.folio_grid("FOLIO BESCO", fotos_folio)
 
         pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
-        # CORRECCIÓN: Resetear el puntero de los PDFs (.seek(0)) antes de empaquetar
         pdfs_folio = [f for f in archivos_folio if f and f.type == "application/pdf"]
         if pdfs_folio:
             merger = PdfWriter()
             merger.append(io.BytesIO(pdf_bytes))
             for p in pdfs_folio: 
-                p.seek(0) # Forzar el reinicio de lectura del archivo cargado
+                p.seek(0) 
                 merger.append(p)
             out = io.BytesIO()
             merger.write(out)
