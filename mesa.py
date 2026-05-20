@@ -153,7 +153,6 @@ fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
 
-# Lista de oficinas operativas sin la zona Norte
 lista_oficinas = [
     "Acapulco", "Toluca", "Pachuca", "Michoacán", "Zonas/ CDMX", "CDMX", 
     "Ben & Company", "BX+", "Emerson", "Odoo"
@@ -210,18 +209,18 @@ df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_
 st.markdown("---")
 st.subheader("5. Envío de Reporte")
 
-# Mapeo de distribución original
+# Mapeo de distribución con las nuevas reglas de destinatarios obligatorios
 mapeo_correos = {
     "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
     "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
     "Pachuca": ["german.constantino@besco.mx"],
     "Michoacán": ["cristobal.rodriguez@besco.mx", "ximena.acosta@besco.mx", "javier.zamano@besco.mx"],
     "Zonas/ CDMX": ["german.constantino@besco.mx", "andres.mayagoitia@besco.mx", "brenda.cervantes@besco.mx"],
-    "CDMX": ["gerardo.mendez@besco.mx"],
-    "Ben & Company": ["gerardo.mendez@besco.mx"], 
-    "BX+": ["gerardo.mendez@besco.mx"], 
-    "Emerson": ["gerardo.mendez@besco.mx"], 
-    "Odoo": ["gerardo.mendez@besco.mx"]
+    "CDMX": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
+    "Ben & Company": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
+    "BX+": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
+    "Emerson": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
+    "Odoo": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "dorian.rodriguez@besco.mx"]
 }
 
 dest_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
