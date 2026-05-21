@@ -39,6 +39,8 @@ class BESCO_PDF(FPDF):
     def __init__(self):
         super().__init__()
         self.section_count = 1
+        # Establecemos un margen de ruptura automático controlado
+        self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
         if LOGO_PATH and os.path.exists(LOGO_PATH):
@@ -68,6 +70,9 @@ class BESCO_PDF(FPDF):
         self.ln(12)
 
     def add_custom_section(self, title):
+        # Si el título va a quedar solo al final de la hoja, saltamos de página antes
+        if self.get_y() > 250:
+            self.add_page()
         self.set_fill_color(30, 58, 95)
         self.set_font('Arial', 'B', 11)
         self.set_text_color(255, 255, 255)
@@ -78,8 +83,13 @@ class BESCO_PDF(FPDF):
 
     def photo_grid(self, title, photos, eq_index=0, prefix="img"):
         if not photos: return
+        
+        # Validación preventiva para el título de la sección de fotos
+        if self.get_y() > 240:
+            self.add_page()
+            
         self.add_custom_section(title)
-        ancho_foto, alto_foto, espacio_v, margen_inf = 90, 65, 75, 280
+        ancho_foto, alto_foto, espacio_v = 90, 65, 72
         
         for i, foto in enumerate(photos):
             foto.seek(0)
@@ -88,16 +98,23 @@ class BESCO_PDF(FPDF):
             img.save(temp_p, format="JPEG")
             
             col = i % 2
-            if col == 0 and self.get_y() + espacio_v > margen_inf:
+            
+            # CONTROL DE PÁGINA: Si la foto de 65mm va a superar el límite físico imprimible (265mm)
+            if col == 0 and (self.get_y() + alto_foto > 265):
                 self.add_page()
-                self.set_font('Arial', 'I', 9); self.set_text_color(100, 100, 100)
+                self.set_font('Arial', 'I', 9)
+                self.set_text_color(100, 100, 100)
                 self.cell(0, 6, f"(Continuación) {title}", 0, 1, 'L')
-                self.set_text_color(0, 0, 0); self.ln(2)
+                self.set_text_color(0, 0, 0)
+                self.ln(2)
                 
             y_act = self.get_y()
             self.image(temp_p, x=10 + (col * 95), y=y_act, w=ancho_foto, h=alto_foto)
-            if col == 1 or i == len(photos) - 1: self.set_y(y_act + espacio_v)
-        self.ln(5)
+            
+            # Avanzar el cursor vertical únicamente al completar la fila de 2 o en la última foto
+            if col == 1 or i == len(photos) - 1:
+                self.set_y(y_act + espacio_v)
+        self.ln(2)
 
     def folio_grid(self, title, photo_files):
         if not photo_files: return
@@ -146,10 +163,7 @@ st.title("📑 Sistema de Evidencia Técnica BESCO")
 st.subheader("1. Identificación General del Servicio")
 c_g1, c_g2, c_g3, c_g4 = st.columns([2, 1, 1, 1.5])
 cliente = c_g1.text_input("Cliente")
-
-# MODIFICACIÓN: Se agrega max_chars=20 para limitar la captura de caracteres
 folio = c_g2.text_input("Folio / OT / TK", max_chars=20)
-
 estado_op = c_g3.selectbox("Estado Global", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], index=4)
 fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 
