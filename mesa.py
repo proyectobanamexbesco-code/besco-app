@@ -146,7 +146,10 @@ st.title("📑 Sistema de Evidencia Técnica BESCO")
 st.subheader("1. Identificación General del Servicio")
 c_g1, c_g2, c_g3, c_g4 = st.columns([2, 1, 1, 1.5])
 cliente = c_g1.text_input("Cliente")
-folio = c_g2.text_input("Folio / OT / TK")
+
+# MODIFICACIÓN: Se agrega max_chars=20 para limitar la captura de caracteres
+folio = c_g2.text_input("Folio / OT / TK", max_chars=20)
+
 estado_op = c_g3.selectbox("Estado Global", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], index=4)
 fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 
@@ -209,7 +212,6 @@ df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_
 st.markdown("---")
 st.subheader("5. Envío de Reporte")
 
-# Mapeo de distribución con las nuevas reglas de destinatarios obligatorios
 mapeo_correos = {
     "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
     "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
