@@ -165,7 +165,6 @@ fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
 
-# Se agregó Tampico a la lista de opciones
 lista_oficinas = [
     "Acapulco", "Toluca", "Pachuca", "Michoacán", "Zonas/ CDMX", "CDMX", 
     "Ben & Company", "BX+", "Emerson", "Odoo", "Tampico"
@@ -222,7 +221,7 @@ df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_
 st.markdown("---")
 st.subheader("5. Envío de Reporte")
 
-# Mapeo de distribución con la nueva oficina "Tampico"
+# Mapeo de distribución actualizado con los correos obligatorios para Tampico
 mapeo_correos = {
     "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
     "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
@@ -234,7 +233,7 @@ mapeo_correos = {
     "BX+": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
     "Emerson": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
     "Odoo": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "dorian.rodriguez@besco.mx"],
-    "Tampico": ["gerardo.mendez@besco.mx"]
+    "Tampico": ["ingrid.lucio@besco.mx", "joel.perez@besco.mx", "gerardo.mendez@besco.mx"]
 }
 
 dest_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
