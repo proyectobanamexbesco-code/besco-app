@@ -39,7 +39,6 @@ class BESCO_PDF(FPDF):
     def __init__(self):
         super().__init__()
         self.section_count = 1
-        # Establecemos un margen de ruptura automático controlado
         self.set_auto_page_break(auto=True, margin=20)
 
     def header(self):
@@ -70,7 +69,6 @@ class BESCO_PDF(FPDF):
         self.ln(12)
 
     def add_custom_section(self, title):
-        # Si el título va a quedar solo al final de la hoja, saltamos de página antes
         if self.get_y() > 250:
             self.add_page()
         self.set_fill_color(30, 58, 95)
@@ -84,7 +82,6 @@ class BESCO_PDF(FPDF):
     def photo_grid(self, title, photos, eq_index=0, prefix="img"):
         if not photos: return
         
-        # Validación preventiva para el título de la sección de fotos
         if self.get_y() > 240:
             self.add_page()
             
@@ -99,7 +96,6 @@ class BESCO_PDF(FPDF):
             
             col = i % 2
             
-            # CONTROL DE PÁGINA: Si la foto de 65mm va a superar el límite físico imprimible (265mm)
             if col == 0 and (self.get_y() + alto_foto > 265):
                 self.add_page()
                 self.set_font('Arial', 'I', 9)
@@ -111,7 +107,6 @@ class BESCO_PDF(FPDF):
             y_act = self.get_y()
             self.image(temp_p, x=10 + (col * 95), y=y_act, w=ancho_foto, h=alto_foto)
             
-            # Avanzar el cursor vertical únicamente al completar la fila de 2 o en la última foto
             if col == 1 or i == len(photos) - 1:
                 self.set_y(y_act + espacio_v)
         self.ln(2)
@@ -170,9 +165,10 @@ fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
 
+# Se agregó Tampico a la lista de opciones
 lista_oficinas = [
     "Acapulco", "Toluca", "Pachuca", "Michoacán", "Zonas/ CDMX", "CDMX", 
-    "Ben & Company", "BX+", "Emerson", "Odoo"
+    "Ben & Company", "BX+", "Emerson", "Odoo", "Tampico"
 ]
 oficina = col_loc2.selectbox("Oficina Responsable", lista_oficinas)
 
@@ -226,6 +222,7 @@ df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_
 st.markdown("---")
 st.subheader("5. Envío de Reporte")
 
+# Mapeo de distribución con la nueva oficina "Tampico"
 mapeo_correos = {
     "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
     "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
@@ -236,7 +233,8 @@ mapeo_correos = {
     "Ben & Company": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx"],
     "BX+": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
     "Emerson": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "patricia.cortes@besco.mx"],
-    "Odoo": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "dorian.rodriguez@besco.mx"]
+    "Odoo": ["gerardo.mendez@besco.mx", "alejandro.ramirez@besco.mx", "dorian.rodriguez@besco.mx"],
+    "Tampico": ["gerardo.mendez@besco.mx"]
 }
 
 dest_oficina = mapeo_correos.get(oficina, ["gerardo.mendez@besco.mx"])
