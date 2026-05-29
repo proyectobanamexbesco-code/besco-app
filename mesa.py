@@ -15,6 +15,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOCAL_LOGO_PATH = r"C:\Users\GerardoMendez\OneDrive - Grupo Besco\Escritorio\MisProyectos\logo.png"
 CLOUD_LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 CLOUD_LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
+CLOUD_LOGO_BESCO = os.path.join(BASE_DIR, "logotipo besco 2026.jpeg") # Añadido tu nombre exacto
 
 if os.path.exists(LOCAL_LOGO_PATH):
     LOGO_PATH = LOCAL_LOGO_PATH
@@ -22,6 +23,8 @@ elif os.path.exists(CLOUD_LOGO_PATH):
     LOGO_PATH = CLOUD_LOGO_PATH
 elif os.path.exists(CLOUD_LOGO_JPG):
     LOGO_PATH = CLOUD_LOGO_JPG
+elif os.path.exists(CLOUD_LOGO_BESCO):
+    LOGO_PATH = CLOUD_LOGO_BESCO
 else:
     LOGO_PATH = None
 
@@ -155,9 +158,8 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, 
         return False
 
 # --- INTERFAZ ---
-# Validar en la web app si detectamos el logo (para ayudarte a diagnosticar)
 if LOGO_PATH is None:
-    st.warning("⚠️ Advertencia: No se encontró el archivo 'logo.png' en GitHub. El PDF se generará sin logotipo.")
+    st.warning("⚠️ Advertencia: No se encontró el archivo del logotipo en GitHub. El PDF se generará sin logotipo.")
 
 st.title("📑 Sistema de Evidencia Técnica BESCO")
 
