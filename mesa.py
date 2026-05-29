@@ -15,7 +15,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOCAL_LOGO_PATH = r"C:\Users\GerardoMendez\OneDrive - Grupo Besco\Escritorio\MisProyectos\logo.png"
 CLOUD_LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 CLOUD_LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
-CLOUD_LOGO_BESCO = os.path.join(BASE_DIR, "logotipo besco 2026.jpeg") # Añadido tu nombre exacto
+CLOUD_LOGO_BESCO = os.path.join(BASE_DIR, "logo besco 2026.jpeg")
 
 if os.path.exists(LOCAL_LOGO_PATH):
     LOGO_PATH = LOCAL_LOGO_PATH
