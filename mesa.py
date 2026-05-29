@@ -156,7 +156,6 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, 
 st.title("📑 Sistema de Evidencia Técnica BESCO")
 
 st.subheader("1. Identificación General del Servicio")
-# Se eliminó la columna de Estado Global y se reajustaron las 3 restantes
 c_g1, c_g2, c_g3 = st.columns([2, 1, 1.5])
 cliente = c_g1.text_input("Cliente")
 folio = c_g2.text_input("Folio / OT / TK", max_chars=20)
@@ -188,10 +187,25 @@ st.markdown("---")
 st.subheader("3. Equipos a Reportar")
 num_equipos = st.number_input("¿Cuántos equipos se atendieron?", min_value=1, max_value=20, value=1)
 
+# Diccionario de leyendas por defecto según categoría
+leyendas_default = {
+    "Conservación": "SE REALIZA REAPRIETE DE TORNILLERIA Y LUBRICACIÓN DE CHAPAS, BISAGRAS, SE HACE REVISIÓN DE ESTADO DE PINTURA, PISOS EXTINTORES Y MOBILIARIO.",
+    "Hidrosanitario": "SE REALIZA REVISIÓN DE CESPOL, MEZCLADORA, MANGUERAS, LLAVES, WC, DESPACHADORES, EXTRACTORES Y CONEXIONES, SE DEJA FUNCIONANDO CORRECTAMENTE.",
+    "Tableros Eléctricos": "SE REALIZA LIMPIEZA, REAPRIETE DE TORNILLERIA, TOMA DE AMPERAJES Y VOLTAJES, SE DEJA FUNCIONANDO CORRECTAMENTE.",
+    "Iluminación": "SE REALIZA REVISIÓN GENERAL DE LÁMPARAS, SE CAMBIAN LAMPARAS FUNDIDAS, SE DEJA FUNCIONANDO CORRECTAMENTE.",
+    "Aire Acondicionado": "SE REALIZA LIMPIEZA GENERAL DE SERPENTINES, TOMADO PRESIÓN DE REFRIGERANTE, VOLTAJES, AMPERAJES, REAPRIRTE DE CONEXIONES, LIMPIEZA DE FILTROS, SE DEJA FUNCIONANDO CORRECTAMENTE."
+}
+
 equipos_data = []
 for i in range(num_equipos):
     with st.expander(f"CONFIGURACIÓN EQUIPO {i+1}", expanded=True):
-        esp = st.selectbox("Categoría", ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Otros"], key=f"esp_{i}")
+        
+        # Nuevos campos: Categoría ampliada y Estatus Final
+        cols_cat = st.columns(2)
+        categorias_opciones = ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Conservación", "Hidrosanitario", "Iluminación", "Otros"]
+        esp = cols_cat[0].selectbox("Categoría", categorias_opciones, key=f"esp_{i}")
+        estatus = cols_cat[1].selectbox("Estatus Final", ["Operando correctamente", "Operando con observaciones", "No queda operando"], key=f"est_{i}")
+        
         meds, otros = {}, ""
         
         if esp == "Aire Acondicionado":
@@ -208,12 +222,20 @@ for i in range(num_equipos):
         marca = ca2.text_input("Marca", key=f"mr_{i}")
         cap = ca3.text_input("Capacidad", key=f"cp_{i}")
         
-        com = st.text_area("Comentarios", key=f"com_{i}")
+        # Campo Editable de Actividades Realizadas
+        texto_defecto = leyendas_default.get(esp, "")
+        actividades = st.text_area("Actividades Realizadas", value=texto_defecto, height=80, key=f"act_{i}")
+        
+        com = st.text_area("Comentarios Extras", key=f"com_{i}")
         
         fa = st.file_uploader("Fotos ANTES", accept_multiple_files=True, key=f"fa_{i}")
         fd = st.file_uploader("Fotos DESPUÉS", accept_multiple_files=True, key=f"fd_{i}")
         
-        equipos_data.append({"numero": i+1, "esp": esp, "meds": meds, "otros": otros, "tag": tag, "marca": marca, "cap": cap, "com": com, "fa": fa, "fd": fd})
+        equipos_data.append({
+            "numero": i+1, "esp": esp, "estatus": estatus, "actividades": actividades, 
+            "meds": meds, "otros": otros, "tag": tag, "marca": marca, "cap": cap, 
+            "com": com, "fa": fa, "fd": fd
+        })
 
 st.subheader("4. Materiales Utilizados")
 df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_rows="dynamic")
@@ -254,7 +276,6 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
         pdf.cell(0, 7, f"Fecha de Ejecución: {f_ejec_str} | Oficina: {oficina}", 0, 1)
         if sucursal: pdf.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
         pdf.set_font('Arial', 'B', 10)
-        # Se eliminó la línea que imprimía el Estado Global
         pdf.cell(0, 7, f"Técnico: {tecnico} | Supervisor: {supervisor}", 0, 1)
         pdf.set_font('Arial', '', 10)
         pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1); pdf.ln(5)
@@ -262,6 +283,11 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
         for eq in equipos_data:
             if pdf.get_y() > 240: pdf.add_page()
             pdf.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
+            
+            # --- IMPRESIÓN DEL ESTATUS ---
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 7, f"Estatus Final: {eq['estatus']}", 0, 1)
+            pdf.set_font('Arial', '', 10)
             
             valid_meds = {k: v for k, v in eq['meds'].items() if v}
             for k, v in valid_meds.items(): 
@@ -274,9 +300,12 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
                 pdf.set_font('Arial', 'B', 9)
                 pdf.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1)
                 pdf.set_font('Arial', '', 10)
-                
+            
+            # --- IMPRESIÓN DE ACTIVIDADES REALIZADAS Y COMENTARIOS ---
+            if eq['actividades']:
+                pdf.multi_cell(0, 6, f"Actividades Realizadas:\n{eq['actividades']}", 1)
             if eq['com']: 
-                pdf.multi_cell(0, 6, f"Comentarios: {eq['com']}", 1)
+                pdf.multi_cell(0, 6, f"Comentarios Extras:\n{eq['com']}", 1)
                 
             pdf.photo_grid(f"Antes (Eq. {eq['numero']})", eq['fa'], eq['numero'], "antes")
             pdf.photo_grid(f"Después (Eq. {eq['numero']})", eq['fd'], eq['numero'], "despues")
