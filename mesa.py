@@ -10,16 +10,18 @@ import io
 import uuid
 from pypdf import PdfWriter
 
-# --- RUTAS PARA EL LOGOTIPO BESCO ---
+# --- RUTAS PARA EL LOGOTIPO BESCO (MEJORADO PARA LA NUBE) ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOCAL_LOGO_PATH = r"C:\Users\GerardoMendez\OneDrive - Grupo Besco\Escritorio\MisProyectos\logo.png"
-CLOUD_LOGO_PATH = "logo.png"
+CLOUD_LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+CLOUD_LOGO_JPG = os.path.join(BASE_DIR, "logo.jpg")
 
 if os.path.exists(LOCAL_LOGO_PATH):
     LOGO_PATH = LOCAL_LOGO_PATH
 elif os.path.exists(CLOUD_LOGO_PATH):
     LOGO_PATH = CLOUD_LOGO_PATH
-elif os.path.exists("logo.jpg"):
-    LOGO_PATH = "logo.jpg"
+elif os.path.exists(CLOUD_LOGO_JPG):
+    LOGO_PATH = CLOUD_LOGO_JPG
 else:
     LOGO_PATH = None
 
@@ -57,7 +59,7 @@ class BESCO_PDF(FPDF):
             except Exception:
                 self.set_font('Arial', 'I', 8)
                 self.set_xy(10, 10)
-                self.cell(0, 10, f"(Logotipo BESCO)")
+                self.cell(0, 10, f"(Error al procesar logo)")
                 
         self.set_font('Arial', 'B', 12)
         self.set_text_color(30, 58, 95)
@@ -153,6 +155,10 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, 
         return False
 
 # --- INTERFAZ ---
+# Validar en la web app si detectamos el logo (para ayudarte a diagnosticar)
+if LOGO_PATH is None:
+    st.warning("⚠️ Advertencia: No se encontró el archivo 'logo.png' en GitHub. El PDF se generará sin logotipo.")
+
 st.title("📑 Sistema de Evidencia Técnica BESCO")
 
 st.subheader("1. Identificación General del Servicio")
@@ -187,7 +193,6 @@ st.markdown("---")
 st.subheader("3. Equipos a Reportar")
 num_equipos = st.number_input("¿Cuántos equipos se atendieron?", min_value=1, max_value=20, value=1)
 
-# Diccionario con las observaciones obligatorias por categoría
 leyendas_default = {
     "Conservación": "SE REALIZA REAPRIETE DE TORNILLERIA Y LUBRICACIÓN DE CHAPAS, BISAGRAS, SE HACE REVISIÓN DE ESTADO DE PINTURA, PISOS EXTINTORES Y MOBILIARIO.",
     "Hidrosanitario": "SE REALIZA REVISIÓN DE CESPOL, MEZCLADORA, MANGUERAS, LLAVES, WC, DESPACHADORES, EXTRACTORES Y CONEXIONES, SE DEJA FUNCIONANDO CORRECTAMENTE.",
@@ -221,8 +226,6 @@ for i in range(num_equipos):
         marca = ca2.text_input("Marca", key=f"mr_{i}")
         cap = ca3.text_input("Capacidad", key=f"cp_{i}")
         
-        # Campo Editable de Actividades Realizadas
-        # El ID de la "key" cambia dinámicamente si se cambia la categoría, para forzar el reinicio de la leyenda
         texto_defecto = leyendas_default.get(esp, "")
         actividades = st.text_area("Actividades Realizadas", value=texto_defecto, height=80, key=f"act_{i}_{esp}")
         
@@ -284,7 +287,6 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
             if pdf.get_y() > 240: pdf.add_page()
             pdf.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
             
-            # --- IMPRESIÓN DEL ESTATUS FINAL ---
             pdf.set_font('Arial', 'B', 10)
             pdf.cell(0, 7, f"Estatus Final: {eq['estatus']}", 0, 1)
             pdf.set_font('Arial', '', 10)
@@ -301,7 +303,6 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
                 pdf.cell(0, 7, f"TAG: {eq['tag']} | Marca: {eq['marca']} | Cap: {eq['cap']}", 0, 1)
                 pdf.set_font('Arial', '', 10)
             
-            # --- IMPRESIÓN DE ACTIVIDADES REALIZADAS Y COMENTARIOS ---
             if eq['actividades']:
                 pdf.multi_cell(0, 6, f"Actividades Realizadas:\n{eq['actividades']}", 1)
             if eq['com']: 
