@@ -156,11 +156,11 @@ def enviar_correo(pdf_bytes, cliente, folio, sucursal, oficina, nombre_archivo, 
 st.title("📑 Sistema de Evidencia Técnica BESCO")
 
 st.subheader("1. Identificación General del Servicio")
-c_g1, c_g2, c_g3, c_g4 = st.columns([2, 1, 1, 1.5])
+# Se eliminó la columna de Estado Global y se reajustaron las 3 restantes
+c_g1, c_g2, c_g3 = st.columns([2, 1, 1.5])
 cliente = c_g1.text_input("Cliente")
 folio = c_g2.text_input("Folio / OT / TK", max_chars=20)
-estado_op = c_g3.selectbox("Estado Global", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], index=4)
-fecha_ejecucion = c_g4.date_input("Fecha de Ejecución", datetime.now())
+fecha_ejecucion = c_g3.date_input("Fecha de Ejecución", datetime.now())
 
 col_loc1, col_loc2 = st.columns(2)
 sucursal = col_loc1.text_input("Sucursal / Inmueble")
@@ -221,7 +221,6 @@ df_mat = st.data_editor(pd.DataFrame(columns=["Cantidad", "Descripción"]), num_
 st.markdown("---")
 st.subheader("5. Envío de Reporte")
 
-# Mapeo de distribución actualizado con los correos obligatorios para Tampico
 mapeo_correos = {
     "Acapulco": ["itzallana.vazquez@besco.mx", "gerardo.fuentes@besco.mx"],
     "Toluca": ["policarpo.rosaliano@besco.mx", "monica.iniestra@besco.mx"],
@@ -255,7 +254,7 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
         pdf.cell(0, 7, f"Fecha de Ejecución: {f_ejec_str} | Oficina: {oficina}", 0, 1)
         if sucursal: pdf.cell(0, 7, f"Sucursal: {sucursal}", 0, 1)
         pdf.set_font('Arial', 'B', 10)
-        pdf.cell(0, 7, f"ESTADO GLOBAL DE OPERACIÓN: {estado_op}/10", 0, 1)
+        # Se eliminó la línea que imprimía el Estado Global
         pdf.cell(0, 7, f"Técnico: {tecnico} | Supervisor: {supervisor}", 0, 1)
         pdf.set_font('Arial', '', 10)
         pdf.cell(0, 7, f"Servicio: {tipo_serv} ({referencia})", 0, 1); pdf.ln(5)
