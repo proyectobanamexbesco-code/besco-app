@@ -187,7 +187,7 @@ st.markdown("---")
 st.subheader("3. Equipos a Reportar")
 num_equipos = st.number_input("¿Cuántos equipos se atendieron?", min_value=1, max_value=20, value=1)
 
-# Diccionario de leyendas por defecto según categoría
+# Diccionario con las observaciones obligatorias por categoría
 leyendas_default = {
     "Conservación": "SE REALIZA REAPRIETE DE TORNILLERIA Y LUBRICACIÓN DE CHAPAS, BISAGRAS, SE HACE REVISIÓN DE ESTADO DE PINTURA, PISOS EXTINTORES Y MOBILIARIO.",
     "Hidrosanitario": "SE REALIZA REVISIÓN DE CESPOL, MEZCLADORA, MANGUERAS, LLAVES, WC, DESPACHADORES, EXTRACTORES Y CONEXIONES, SE DEJA FUNCIONANDO CORRECTAMENTE.",
@@ -200,7 +200,6 @@ equipos_data = []
 for i in range(num_equipos):
     with st.expander(f"CONFIGURACIÓN EQUIPO {i+1}", expanded=True):
         
-        # Nuevos campos: Categoría ampliada y Estatus Final
         cols_cat = st.columns(2)
         categorias_opciones = ["Ninguna", "Aire Acondicionado", "Tableros Eléctricos", "Hidroneumático", "Conservación", "Hidrosanitario", "Iluminación", "Otros"]
         esp = cols_cat[0].selectbox("Categoría", categorias_opciones, key=f"esp_{i}")
@@ -223,8 +222,9 @@ for i in range(num_equipos):
         cap = ca3.text_input("Capacidad", key=f"cp_{i}")
         
         # Campo Editable de Actividades Realizadas
+        # El ID de la "key" cambia dinámicamente si se cambia la categoría, para forzar el reinicio de la leyenda
         texto_defecto = leyendas_default.get(esp, "")
-        actividades = st.text_area("Actividades Realizadas", value=texto_defecto, height=80, key=f"act_{i}")
+        actividades = st.text_area("Actividades Realizadas", value=texto_defecto, height=80, key=f"act_{i}_{esp}")
         
         com = st.text_area("Comentarios Extras", key=f"com_{i}")
         
@@ -284,7 +284,7 @@ if st.button("🚀 Generar y Enviar Reporte Final", type="primary"):
             if pdf.get_y() > 240: pdf.add_page()
             pdf.add_custom_section(f"EQUIPO {eq['numero']}: {eq['esp']}")
             
-            # --- IMPRESIÓN DEL ESTATUS ---
+            # --- IMPRESIÓN DEL ESTATUS FINAL ---
             pdf.set_font('Arial', 'B', 10)
             pdf.cell(0, 7, f"Estatus Final: {eq['estatus']}", 0, 1)
             pdf.set_font('Arial', '', 10)
